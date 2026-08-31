@@ -1,6 +1,7 @@
 import os
 import requests
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from google import genai
 
@@ -17,6 +18,55 @@ if not MARKETAUX_API_KEY:
 
 if not GEMINI_API_KEY:
     raise RuntimeError("GEMINI_API_KEY secret is missing")
+
+
+# ============================================================
+# US MARKET TIME
+# ============================================================
+
+ET = ZoneInfo("America/New_York")
+
+
+def get_market_slot():
+
+    now_et = datetime.now(ET)
+
+    hour = now_et.hour
+    minute = now_et.minute
+
+    # --------------------------------------------------------
+    # PRE-MARKET
+    # 8:30 AM ET
+    # --------------------------------------------------------
+
+    if hour == 8 and minute == 30:
+        return "PRE_MARKET"
+
+    # --------------------------------------------------------
+    # MARKET OPEN
+    # 10:00 AM ET
+    # --------------------------------------------------------
+
+    if hour == 10 and minute == 0:
+        return "MARKET_OPEN"
+
+    # --------------------------------------------------------
+    # MID-MARKET
+    # 1:00 PM ET
+    # --------------------------------------------------------
+
+    if hour == 13 and minute == 0:
+        return "MID_MARKET"
+
+    # --------------------------------------------------------
+    # MARKET CLOSE
+    # 4:15 PM ET
+    # --------------------------------------------------------
+
+    if hour == 16 and minute == 15:
+        return "MARKET_CLOSE"
+
+    return None
 
 
 # ============================================================
@@ -122,10 +172,106 @@ URL:
 
 
 # ============================================================
+# SLOT-SPECIFIC INSTRUCTIONS
+# ============================================================
+
+def get_slot_instructions(slot):
+
+    if slot == "PRE_MARKET":
+
+        return """
+POST TYPE: PRE-MARKET INTELLIGENCE
+
+The US stock market has not opened yet.
+
+Focus on:
+
+- Important overnight developments
+- Major company news
+- Economic developments already reported
+- Fed-related developments if present in the supplied news
+- Major market-moving catalysts
+- Important stocks/tickers mentioned in the news
+- What investors should be watching when the market opens
+
+Do NOT predict what the market will do.
+
+Make it clear that this is a pre-market update.
+"""
+
+    if slot == "MARKET_OPEN":
+
+        return """
+POST TYPE: MARKET OPEN UPDATE
+
+The US stock market has opened.
+
+Focus on:
+
+- News affecting the opening session
+- Companies or sectors mentioned in the supplied news
+- Important developments around the market open
+- Why the reported developments matter
+- Any actual market information contained in the supplied news
+
+Do NOT invent opening prices or percentage moves.
+
+Make it clear that this is an early-session update.
+"""
+
+    if slot == "MID_MARKET":
+
+        return """
+POST TYPE: MID-MARKET UPDATE
+
+The US stock market is in the middle of the trading session.
+
+Focus on:
+
+- Important developments since the market opened
+- News that may be influencing investors
+- Companies/sectors receiving attention
+- Major catalysts in the supplied news
+- What remains important for the rest of the session
+
+Do NOT invent intraday prices or market movements.
+
+Make it clear that this is a mid-session update.
+"""
+
+    if slot == "MARKET_CLOSE":
+
+        return """
+POST TYPE: MARKET CLOSE UPDATE
+
+The regular US stock market session has ended.
+
+Focus on:
+
+- The most important developments from the session
+- Company and sector news
+- Important market-moving stories
+- What changed during the session if supported by the supplied news
+- What investors may be watching next
+
+Do NOT invent closing prices or percentage moves.
+
+Make it clear that this is a post-market closing update.
+"""
+
+    return """
+POST TYPE: MANUAL MARKET NEWS UPDATE
+
+Create a general professional US stock market news update
+based only on the supplied news.
+"""
+
+
+# ============================================================
 # GEMINI AI
 # ============================================================
 
-def generate_post(news_text):
+def generate_post(news_text, slot):
 
     print("Connecting to Gemini...")
 
@@ -133,99 +279,126 @@ def generate_post(news_text):
         api_key=GEMINI_API_KEY
     )
 
-    current_time = datetime.now(
-        timezone.utc
-    ).strftime(
-        "%Y-%m-%d %H:%M UTC"
+    now_utc = datetime.now(timezone.utc)
+
+    now_et = now_utc.astimezone(ET)
+
+    current_time = now_et.strftime(
+        "%Y-%m-%d %I:%M %p ET"
     )
 
-    prompt = f"""
-You are a professional US stock market news editor.
+    slot_instructions = get_slot_instructions(slot)
 
-Current UTC time:
+    prompt = f"""
+You are a professional US financial news editor.
+
+CURRENT US EASTERN TIME:
 {current_time}
 
-You are given REAL financial news retrieved from Marketaux.
-
-Your job is to create ONE high-quality social-media-ready
-US stock market news post.
+CURRENT POST TYPE:
+{slot}
 
 ============================================================
-STRICT FACTUAL RULES
+POST TYPE INSTRUCTIONS
 ============================================================
 
-1. Use ONLY information present in the supplied news.
-
-2. NEVER invent:
-   - stock prices
-   - percentage moves
-   - earnings numbers
-   - revenue
-   - guidance
-   - Fed statements
-   - economic data
-   - analyst targets
-   - company announcements
-
-3. Never present speculation as confirmed fact.
-
-4. If the supplied information is insufficient,
-   clearly say that the information is insufficient.
-
-5. Do not copy article text word-for-word.
-
-6. Do not fabricate quotes.
-
-7. Do not give financial advice.
-
-8. Do not tell people to:
-   - Buy
-   - Sell
-   - Short
-   - Hold
-
-9. Do not use phrases such as:
-   - guaranteed
-   - will definitely rise
-   - will definitely crash
-   - risk-free
-
-10. Mention ticker symbols only when they are actually
-    present in the supplied data.
+{slot_instructions}
 
 ============================================================
-CONTENT STYLE
+EDITORIAL RULES
 ============================================================
 
-The post should feel like professional financial media.
+You are working with REAL financial news retrieved from
+Marketaux.
 
-Style:
+Use ONLY facts contained in the supplied news.
 
-- Clear
-- Fast
-- Credible
-- Concise
-- Investor-focused
-- Easy to understand
-- No unnecessary hype
+NEVER invent:
 
-Explain WHY the news matters.
+- stock prices
+- percentage moves
+- market index levels
+- earnings numbers
+- revenue
+- guidance
+- economic data
+- analyst targets
+- Fed statements
+- company announcements
+- quotes
+- dates
+- statistics
+
+If a fact is not available in the supplied news,
+DO NOT make it up.
+
+Do not present speculation as confirmed fact.
+
+Do not copy article text word-for-word.
+
+Do not give financial advice.
+
+Do not tell users to:
+
+- Buy
+- Sell
+- Short
+- Hold
+
+Do not use:
+
+- guaranteed
+- risk-free
+- will definitely rise
+- will definitely fall
+- will crash
+- will explode
+
+Only mention a ticker when the ticker is actually present
+in the supplied data.
+
+============================================================
+CONTENT QUALITY
+============================================================
+
+Write like a professional financial media account.
+
+The content should be:
+
+- concise
+- credible
+- informative
+- easy to understand
+- engaging
+- investor-focused
+- suitable for Instagram, Facebook and X
+
+The most important goal is:
+
+Explain WHAT happened and WHY it matters.
+
+Do not turn ordinary news into sensational breaking news.
+
+If several articles discuss the same event, combine them
+instead of repeating the same information.
+
+Prioritize the most important and market-relevant story.
 
 ============================================================
 RETURN EXACTLY THIS FORMAT
 ============================================================
 
 HEADLINE:
-<short strong headline>
+<short professional headline>
 
 HOOK:
-<one compelling sentence>
+<one strong sentence>
 
 WHAT_HAPPENED:
 <2-3 concise sentences>
 
 WHY_IT_MATTERS:
-<2-3 concise sentences explaining market relevance>
+<2-3 concise sentences>
 
 TICKERS:
 <ticker list or N/A>
@@ -234,7 +407,7 @@ SENTIMENT:
 <BULLISH / BEARISH / MIXED / NEUTRAL>
 
 CAPTION:
-<Instagram/Facebook-ready caption>
+<social-media-ready caption>
 
 HASHTAGS:
 <8-12 relevant hashtags>
@@ -243,7 +416,7 @@ SOURCE:
 <source names>
 
 ============================================================
-NEWS DATA
+REAL NEWS DATA
 ============================================================
 
 {news_text}
@@ -273,15 +446,67 @@ NEWS DATA
 
 def main():
 
-    print("=" * 60)
+    print("=" * 70)
     print("US MARKET AUTO NEWS")
-    print("=" * 60)
+    print("=" * 70)
+
+    now_et = datetime.now(ET)
+
+    print(
+        f"US Eastern Time: "
+        f"{now_et.strftime('%Y-%m-%d %I:%M:%S %p ET')}"
+    )
+
+    # --------------------------------------------------------
+    # DETERMINE MARKET SLOT
+    # --------------------------------------------------------
+
+    slot = get_market_slot()
+
+    # --------------------------------------------------------
+    # MANUAL WORKFLOW RUN
+    # --------------------------------------------------------
+
+    github_event = os.environ.get(
+        "GITHUB_EVENT_NAME",
+        ""
+    )
+
+    if github_event == "workflow_dispatch":
+
+        slot = "MANUAL"
+
+        print(
+            "\nManual workflow detected."
+        )
+
+    # --------------------------------------------------------
+    # SCHEDULED RUN AT WRONG DST DUPLICATE TIME
+    # --------------------------------------------------------
+
+    if not slot:
+
+        print(
+            "\nNo valid market-news slot at this time."
+        )
+
+        print(
+            "Exiting without generating a post."
+        )
+
+        return
+
+    print(
+        f"\nPOST SLOT: {slot}"
+    )
 
     # --------------------------------------------------------
     # STEP 1
     # --------------------------------------------------------
 
-    print("\n[1/3] Fetching US market news...")
+    print(
+        "\n[1/3] Fetching US market news..."
+    )
 
     articles = get_market_news()
 
@@ -310,7 +535,8 @@ def main():
     )
 
     post = generate_post(
-        news_text
+        news_text,
+        slot
     )
 
     # --------------------------------------------------------
@@ -318,15 +544,15 @@ def main():
     # --------------------------------------------------------
 
     print("\n")
-    print("=" * 60)
+    print("=" * 70)
     print("GENERATED POST")
-    print("=" * 60)
+    print("=" * 70)
 
     print(post)
 
-    print("=" * 60)
+    print("=" * 70)
     print("SUCCESS")
-    print("=" * 60)
+    print("=" * 70)
 
 
 # ============================================================
