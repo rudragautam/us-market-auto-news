@@ -77,18 +77,22 @@ def get_market_slot():
 # GET US MARKET NEWS
 # ============================================================
 
+# ============================================================
+# GET US MARKET NEWS
+# ============================================================
+
 def get_market_news():
 
     url = "https://api.marketaux.com/v1/news/all"
 
-    now_utc = datetime.now(timezone.utc)
+    # Get news from the last 24 hours.
+    # IMPORTANT:
+    # Marketaux expects this date format WITHOUT trailing "Z".
+    from datetime import timedelta
 
-    # Prefer recent news.
-    # We look back 24 hours so that a slot does not fail
-    # simply because there is a quiet news period.
     published_after = (
-        now_utc - timedelta(hours=24)
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        datetime.now(timezone.utc) - timedelta(hours=24)
+    ).strftime("%Y-%m-%dT%H:%M:%S")
 
     params = {
         "api_token": MARKETAUX_API_KEY,
@@ -96,17 +100,27 @@ def get_market_news():
         "language": "en",
         "filter_entities": "true",
         "must_have_entities": "true",
+
+        # Keep this low for free-tier compatibility.
+        "limit": 3,
+
+        # IMPORTANT: no Z at the end
         "published_after": published_after,
-        "limit": 20,
     }
 
     print("Requesting Marketaux news...")
+    print(f"Published after: {published_after} UTC")
 
     response = requests.get(
         url,
         params=params,
         timeout=30
     )
+
+    # Print useful error information if Marketaux rejects request
+    if not response.ok:
+        print("Marketaux API Error:")
+        print(response.text)
 
     response.raise_for_status()
 
@@ -116,7 +130,7 @@ def get_market_news():
 
     if not articles:
         raise RuntimeError(
-            "No recent US market news returned by Marketaux"
+            "No US market news returned by Marketaux"
         )
 
     return articles
