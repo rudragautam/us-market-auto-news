@@ -36,7 +36,13 @@ def get_market_news():
         "limit": 10,
     }
 
-    response = requests.get(url, params=params, timeout=30)
+    print("Requesting Marketaux news...")
+
+    response = requests.get(
+        url,
+        params=params,
+        timeout=30
+    )
 
     response.raise_for_status()
 
@@ -45,7 +51,9 @@ def get_market_news():
     articles = data.get("data", [])
 
     if not articles:
-        raise RuntimeError("No US market news returned by Marketaux")
+        raise RuntimeError(
+            "No US market news returned by Marketaux"
+        )
 
     return articles
 
@@ -69,34 +77,40 @@ def prepare_news(articles):
         entities = []
 
         for entity in article.get("entities", []):
+
             symbol = entity.get("symbol")
             name = entity.get("name")
             sentiment = entity.get("sentiment_score")
 
             if symbol or name:
+
                 entities.append(
-                    f"{name or ''} ({symbol or ''}) sentiment={sentiment}"
+                    f"{name or ''} "
+                    f"({symbol or ''}) "
+                    f"sentiment={sentiment}"
                 )
 
         entity_text = ", ".join(entities)
 
         news_text.append(
             f"""
+============================================================
 NEWS {index}
+============================================================
 
-Title:
+TITLE:
 {title}
 
-Description:
+DESCRIPTION:
 {description}
 
-Source:
+SOURCE:
 {source}
 
-Published:
+PUBLISHED:
 {published_at}
 
-Entities:
+ENTITIES:
 {entity_text}
 
 URL:
@@ -108,14 +122,20 @@ URL:
 
 
 # ============================================================
-# GEMINI
+# GEMINI AI
 # ============================================================
 
 def generate_post(news_text):
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    print("Connecting to Gemini...")
 
-    current_time = datetime.now(timezone.utc).strftime(
+    client = genai.Client(
+        api_key=GEMINI_API_KEY
+    )
+
+    current_time = datetime.now(
+        timezone.utc
+    ).strftime(
         "%Y-%m-%d %H:%M UTC"
     )
 
@@ -125,41 +145,90 @@ You are a professional US stock market news editor.
 Current UTC time:
 {current_time}
 
-Below is REAL market news retrieved from Marketaux.
+You are given REAL financial news retrieved from Marketaux.
 
-Your job is to create ONE social-media-ready US market news post.
+Your job is to create ONE high-quality social-media-ready
+US stock market news post.
 
-IMPORTANT RULES:
+============================================================
+STRICT FACTUAL RULES
+============================================================
 
-1. Use ONLY facts present in the supplied news.
-2. NEVER invent stock prices, percentages, earnings,
-   Fed statements, company announcements or numbers.
-3. Do not present speculation as fact.
-4. If information is insufficient, say so.
+1. Use ONLY information present in the supplied news.
+
+2. NEVER invent:
+   - stock prices
+   - percentage moves
+   - earnings numbers
+   - revenue
+   - guidance
+   - Fed statements
+   - economic data
+   - analyst targets
+   - company announcements
+
+3. Never present speculation as confirmed fact.
+
+4. If the supplied information is insufficient,
+   clearly say that the information is insufficient.
+
 5. Do not copy article text word-for-word.
-6. Keep the writing concise and engaging.
-7. Focus on why the news matters to investors.
-8. Mention the company/ticker when available.
-9. Do not give financial advice.
-10. Do not say "buy", "sell", "guaranteed", "will rise",
-    or "will crash".
 
-Return exactly this format:
+6. Do not fabricate quotes.
+
+7. Do not give financial advice.
+
+8. Do not tell people to:
+   - Buy
+   - Sell
+   - Short
+   - Hold
+
+9. Do not use phrases such as:
+   - guaranteed
+   - will definitely rise
+   - will definitely crash
+   - risk-free
+
+10. Mention ticker symbols only when they are actually
+    present in the supplied data.
+
+============================================================
+CONTENT STYLE
+============================================================
+
+The post should feel like professional financial media.
+
+Style:
+
+- Clear
+- Fast
+- Credible
+- Concise
+- Investor-focused
+- Easy to understand
+- No unnecessary hype
+
+Explain WHY the news matters.
+
+============================================================
+RETURN EXACTLY THIS FORMAT
+============================================================
 
 HEADLINE:
-<short headline>
+<short strong headline>
 
 HOOK:
-<one sentence>
+<one compelling sentence>
 
 WHAT_HAPPENED:
-<2-3 sentences>
+<2-3 concise sentences>
 
 WHY_IT_MATTERS:
-<2-3 sentences>
+<2-3 concise sentences explaining market relevance>
 
 TICKERS:
-<ticker list, or N/A>
+<ticker list or N/A>
 
 SENTIMENT:
 <BULLISH / BEARISH / MIXED / NEUTRAL>
@@ -173,19 +242,29 @@ HASHTAGS:
 SOURCE:
 <source names>
 
-NEWS DATA:
+============================================================
+NEWS DATA
+============================================================
+
 {news_text}
 """
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
+    print("Sending request to Gemini...")
+
+    interaction = client.interactions.create(
+        model="gemini-3.6-flash",
+        input=prompt,
+        store=False,
     )
 
-    if not response.text:
-        raise RuntimeError("Gemini returned empty response")
+    post = interaction.output_text
 
-    return response.text
+    if not post:
+        raise RuntimeError(
+            "Gemini returned empty response"
+        )
+
+    return post
 
 
 # ============================================================
@@ -198,27 +277,61 @@ def main():
     print("US MARKET AUTO NEWS")
     print("=" * 60)
 
+    # --------------------------------------------------------
+    # STEP 1
+    # --------------------------------------------------------
+
     print("\n[1/3] Fetching US market news...")
 
     articles = get_market_news()
 
-    print(f"Received {len(articles)} news articles.")
+    print(
+        f"Received {len(articles)} news articles."
+    )
 
-    print("\n[2/3] Preparing news for AI...")
+    # --------------------------------------------------------
+    # STEP 2
+    # --------------------------------------------------------
 
-    news_text = prepare_news(articles)
+    print(
+        "\n[2/3] Preparing news for AI..."
+    )
 
-    print("\n[3/3] Generating post with Gemini...")
+    news_text = prepare_news(
+        articles
+    )
 
-    post = generate_post(news_text)
+    # --------------------------------------------------------
+    # STEP 3
+    # --------------------------------------------------------
+
+    print(
+        "\n[3/3] Generating post with Gemini..."
+    )
+
+    post = generate_post(
+        news_text
+    )
+
+    # --------------------------------------------------------
+    # OUTPUT
+    # --------------------------------------------------------
 
     print("\n")
     print("=" * 60)
     print("GENERATED POST")
     print("=" * 60)
+
     print(post)
+
+    print("=" * 60)
+    print("SUCCESS")
     print("=" * 60)
 
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
 
 if __name__ == "__main__":
     main()
