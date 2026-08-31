@@ -4,19 +4,32 @@ on:
   workflow_dispatch:
 
   schedule:
-    # Pre-Market: 8:30 AM ET
+    # ========================================================
+    # PRE-MARKET
+    # 8:30 AM ET
+    # Two UTC slots to handle EST / EDT
+    # ========================================================
     - cron: "30 12 * * 1-5"
     - cron: "30 13 * * 1-5"
 
-    # After Open: 10:00 AM ET
+    # ========================================================
+    # AFTER OPEN
+    # 10:00 AM ET
+    # ========================================================
     - cron: "0 14 * * 1-5"
     - cron: "0 15 * * 1-5"
 
-    # Mid-Market: 1:00 PM ET
+    # ========================================================
+    # MID-MARKET
+    # 1:00 PM ET
+    # ========================================================
     - cron: "0 17 * * 1-5"
     - cron: "0 18 * * 1-5"
 
-    # After Close: 4:15 PM ET
+    # ========================================================
+    # AFTER CLOSE
+    # 4:15 PM ET
+    # ========================================================
     - cron: "15 20 * * 1-5"
     - cron: "15 21 * * 1-5"
 
@@ -29,18 +42,38 @@ jobs:
 
     steps:
 
+      # ======================================================
+      # 1. CHECKOUT REPOSITORY
+      # ======================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
+
+
+      # ======================================================
+      # 2. SETUP PYTHON
+      # ======================================================
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
+
+
+      # ======================================================
+      # 3. INSTALL DEPENDENCIES
+      # ======================================================
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+
+      # ======================================================
+      # 4. GENERATE NEWS + AI IMAGE
+      # ======================================================
 
       - name: Generate US market post
         env:
@@ -48,3 +81,16 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python main.py
+
+
+      # ======================================================
+      # 5. UPLOAD GENERATED FILES
+      # ======================================================
+
+      - name: Upload generated post and image
+        uses: actions/upload-artifact@v4
+        with:
+          name: us-market-news-output-${{ github.run_number }}
+          path: output/
+          if-no-files-found: error
+          retention-days: 7
