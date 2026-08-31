@@ -1,6 +1,6 @@
 import os
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
 from google import genai
@@ -21,11 +21,15 @@ if not GEMINI_API_KEY:
 
 
 # ============================================================
-# US MARKET TIME
+# US EASTERN TIME
 # ============================================================
 
 ET = ZoneInfo("America/New_York")
 
+
+# ============================================================
+# MARKET SLOT
+# ============================================================
 
 def get_market_slot():
 
@@ -43,7 +47,7 @@ def get_market_slot():
         return "PRE_MARKET"
 
     # --------------------------------------------------------
-    # MARKET OPEN
+    # AFTER MARKET OPEN
     # 10:00 AM ET
     # --------------------------------------------------------
 
@@ -59,7 +63,7 @@ def get_market_slot():
         return "MID_MARKET"
 
     # --------------------------------------------------------
-    # MARKET CLOSE
+    # AFTER MARKET CLOSE
     # 4:15 PM ET
     # --------------------------------------------------------
 
@@ -77,13 +81,23 @@ def get_market_news():
 
     url = "https://api.marketaux.com/v1/news/all"
 
+    now_utc = datetime.now(timezone.utc)
+
+    # Prefer recent news.
+    # We look back 24 hours so that a slot does not fail
+    # simply because there is a quiet news period.
+    published_after = (
+        now_utc - timedelta(hours=24)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     params = {
         "api_token": MARKETAUX_API_KEY,
         "countries": "us",
         "language": "en",
         "filter_entities": "true",
         "must_have_entities": "true",
-        "limit": 10,
+        "published_after": published_after,
+        "limit": 20,
     }
 
     print("Requesting Marketaux news...")
@@ -102,10 +116,137 @@ def get_market_news():
 
     if not articles:
         raise RuntimeError(
-            "No US market news returned by Marketaux"
+            "No recent US market news returned by Marketaux"
         )
 
     return articles
+
+
+# ============================================================
+# CLEAN + RANK NEWS
+# ============================================================
+
+def select_best_articles(articles):
+
+    scored = []
+
+    # Keywords that usually indicate stronger market relevance.
+    important_keywords = [
+        "fed",
+        "federal reserve",
+        "interest rate",
+        "inflation",
+        "cpi",
+        "ppi",
+        "jobs",
+        "employment",
+        "payroll",
+        "gdp",
+        "recession",
+        "tariff",
+        "trade",
+        "earnings",
+        "revenue",
+        "guidance",
+        "merger",
+        "acquisition",
+        "lawsuit",
+        "regulator",
+        "sec",
+        "bank",
+        "banking",
+        "oil",
+        "crude",
+        "nasdaq",
+        "dow",
+        "s&p",
+        "stock",
+        "shares",
+        "market",
+    ]
+
+    for article in articles:
+
+        title = (
+            article.get("title") or ""
+        ).strip()
+
+        description = (
+            article.get("description") or ""
+        ).strip()
+
+        text = (
+            title + " " + description
+        ).lower()
+
+        score = 0
+
+        # Stronger score for market-relevant terms.
+        for keyword in important_keywords:
+
+            if keyword in text:
+                score += 2
+
+        # Prefer articles with a proper title.
+        if title:
+            score += 2
+
+        # Prefer articles with descriptions.
+        if description:
+            score += 1
+
+        # Prefer articles with identified entities.
+        entities = article.get("entities") or []
+
+        if entities:
+            score += 2
+
+        # Prefer recent stories.
+        published = article.get("published_at")
+
+        if published:
+            try:
+                published_dt = datetime.fromisoformat(
+                    published.replace("Z", "+00:00")
+                )
+
+                age_hours = (
+                    datetime.now(timezone.utc)
+                    - published_dt
+                ).total_seconds() / 3600
+
+                if age_hours <= 3:
+                    score += 5
+
+                elif age_hours <= 6:
+                    score += 4
+
+                elif age_hours <= 12:
+                    score += 3
+
+                elif age_hours <= 24:
+                    score += 1
+
+            except Exception:
+                pass
+
+        scored.append(
+            (score, article)
+        )
+
+    # Highest score first.
+    scored.sort(
+        key=lambda item: item[0],
+        reverse=True
+    )
+
+    # Keep only the best few candidates.
+    # Gemini will receive these as candidates,
+    # but will be explicitly forced to select ONE.
+    return [
+        article
+        for score, article in scored[:5]
+    ]
 
 
 # ============================================================
@@ -116,21 +257,54 @@ def prepare_news(articles):
 
     news_text = []
 
-    for index, article in enumerate(articles, start=1):
+    for index, article in enumerate(
+        articles,
+        start=1
+    ):
 
-        title = article.get("title", "")
-        description = article.get("description", "")
-        source = article.get("source", "")
-        published_at = article.get("published_at", "")
-        url = article.get("url", "")
+        title = article.get(
+            "title",
+            ""
+        )
+
+        description = article.get(
+            "description",
+            ""
+        )
+
+        source = article.get(
+            "source",
+            ""
+        )
+
+        published_at = article.get(
+            "published_at",
+            ""
+        )
+
+        url = article.get(
+            "url",
+            ""
+        )
 
         entities = []
 
-        for entity in article.get("entities", []):
+        for entity in article.get(
+            "entities",
+            []
+        ):
 
-            symbol = entity.get("symbol")
-            name = entity.get("name")
-            sentiment = entity.get("sentiment_score")
+            symbol = entity.get(
+                "symbol"
+            )
+
+            name = entity.get(
+                "name"
+            )
+
+            sentiment = entity.get(
+                "sentiment_score"
+            )
 
             if symbol or name:
 
@@ -140,12 +314,14 @@ def prepare_news(articles):
                     f"sentiment={sentiment}"
                 )
 
-        entity_text = ", ".join(entities)
+        entity_text = ", ".join(
+            entities
+        )
 
         news_text.append(
             f"""
 ============================================================
-NEWS {index}
+CANDIDATE NEWS {index}
 ============================================================
 
 TITLE:
@@ -168,126 +344,116 @@ URL:
 """
         )
 
-    return "\n".join(news_text)
+    return "\n".join(
+        news_text
+    )
 
 
 # ============================================================
-# SLOT-SPECIFIC INSTRUCTIONS
+# SLOT INSTRUCTIONS
 # ============================================================
 
 def get_slot_instructions(slot):
 
-    if slot == "PRE_MARKET":
+    instructions = {
 
-        return """
-POST TYPE: PRE-MARKET INTELLIGENCE
+        "PRE_MARKET": """
+POST TYPE: PRE-MARKET UPDATE
 
-The US stock market has not opened yet.
+The US regular stock market has not opened yet.
 
-Focus on:
+Focus on the single most important fresh market story
+investors should know before the opening bell.
 
-- Important overnight developments
-- Major company news
-- Economic developments already reported
-- Fed-related developments if present in the supplied news
-- Major market-moving catalysts
-- Important stocks/tickers mentioned in the news
-- What investors should be watching when the market opens
+Prefer:
+- major company developments
+- major economic developments
+- Fed-related developments
+- important regulatory developments
+- major market-moving catalysts
 
-Do NOT predict what the market will do.
+Do not predict market direction.
+""",
 
-Make it clear that this is a pre-market update.
-"""
+        "MARKET_OPEN": """
+POST TYPE: EARLY MARKET UPDATE
 
-    if slot == "MARKET_OPEN":
+The US regular stock market has already opened.
 
-        return """
-POST TYPE: MARKET OPEN UPDATE
+Focus on the single most important fresh story relevant
+to the early trading session.
 
-The US stock market has opened.
+Do not invent opening prices or percentage moves.
+""",
 
-Focus on:
-
-- News affecting the opening session
-- Companies or sectors mentioned in the supplied news
-- Important developments around the market open
-- Why the reported developments matter
-- Any actual market information contained in the supplied news
-
-Do NOT invent opening prices or percentage moves.
-
-Make it clear that this is an early-session update.
-"""
-
-    if slot == "MID_MARKET":
-
-        return """
+        "MID_MARKET": """
 POST TYPE: MID-MARKET UPDATE
 
 The US stock market is in the middle of the trading session.
 
-Focus on:
+Focus on the single most important fresh development
+relevant to the current session.
 
-- Important developments since the market opened
-- News that may be influencing investors
-- Companies/sectors receiving attention
-- Major catalysts in the supplied news
-- What remains important for the rest of the session
+Do not invent intraday prices or percentage moves.
+""",
 
-Do NOT invent intraday prices or market movements.
-
-Make it clear that this is a mid-session update.
-"""
-
-    if slot == "MARKET_CLOSE":
-
-        return """
-POST TYPE: MARKET CLOSE UPDATE
+        "MARKET_CLOSE": """
+POST TYPE: POST-MARKET UPDATE
 
 The regular US stock market session has ended.
 
-Focus on:
+Focus on the single most important story from the session
+or the most important newly reported development.
 
-- The most important developments from the session
-- Company and sector news
-- Important market-moving stories
-- What changed during the session if supported by the supplied news
-- What investors may be watching next
+Do not invent closing prices or percentage moves.
+""",
 
-Do NOT invent closing prices or percentage moves.
-
-Make it clear that this is a post-market closing update.
-"""
-
-    return """
+        "MANUAL": """
 POST TYPE: MANUAL MARKET NEWS UPDATE
 
-Create a general professional US stock market news update
-based only on the supplied news.
+Create one professional US market news post based on
+the single strongest candidate story.
 """
+    }
+
+    return instructions.get(
+        slot,
+        instructions["MANUAL"]
+    )
 
 
 # ============================================================
-# GEMINI AI
+# GEMINI
 # ============================================================
 
-def generate_post(news_text, slot):
+def generate_post(
+    news_text,
+    slot
+):
 
-    print("Connecting to Gemini...")
+    print(
+        "Connecting to Gemini..."
+    )
 
     client = genai.Client(
         api_key=GEMINI_API_KEY
     )
 
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(
+        timezone.utc
+    )
 
-    now_et = now_utc.astimezone(ET)
+    now_et = now_utc.astimezone(
+        ET
+    )
 
     current_time = now_et.strftime(
         "%Y-%m-%d %I:%M %p ET"
     )
 
-    slot_instructions = get_slot_instructions(slot)
+    slot_instructions = (
+        get_slot_instructions(slot)
+    )
 
     prompt = f"""
 You are a professional US financial news editor.
@@ -295,23 +461,44 @@ You are a professional US financial news editor.
 CURRENT US EASTERN TIME:
 {current_time}
 
-CURRENT POST TYPE:
+POST SLOT:
 {slot}
-
-============================================================
-POST TYPE INSTRUCTIONS
-============================================================
 
 {slot_instructions}
 
 ============================================================
-EDITORIAL RULES
+CRITICAL STORY SELECTION RULE
 ============================================================
 
-You are working with REAL financial news retrieved from
-Marketaux.
+You have been given multiple candidate news articles.
 
-Use ONLY facts contained in the supplied news.
+YOU MUST SELECT EXACTLY ONE PRIMARY NEWS STORY.
+
+This is extremely important.
+
+Do NOT combine unrelated articles.
+
+Do NOT create a story using information from multiple
+different events.
+
+Once you select the strongest candidate, ALL sections of
+the final post must be based ONLY on that ONE candidate.
+
+You may use its title, description, source, entities,
+published time and URL.
+
+Do not use facts from another candidate.
+
+If two candidates are clearly about the SAME event,
+you may use them together.
+
+Otherwise, choose ONE.
+
+============================================================
+FACTUAL ACCURACY
+============================================================
+
+Use ONLY facts contained in the supplied candidate news.
 
 NEVER invent:
 
@@ -329,8 +516,7 @@ NEVER invent:
 - dates
 - statistics
 
-If a fact is not available in the supplied news,
-DO NOT make it up.
+If a fact is not supplied, do not mention it.
 
 Do not present speculation as confirmed fact.
 
@@ -338,12 +524,7 @@ Do not copy article text word-for-word.
 
 Do not give financial advice.
 
-Do not tell users to:
-
-- Buy
-- Sell
-- Short
-- Hold
+Never tell users to buy, sell, short or hold.
 
 Do not use:
 
@@ -354,39 +535,40 @@ Do not use:
 - will crash
 - will explode
 
-Only mention a ticker when the ticker is actually present
-in the supplied data.
+Only mention a ticker if it is actually present
+in the selected candidate.
 
 ============================================================
-CONTENT QUALITY
+EDITORIAL STYLE
 ============================================================
 
 Write like a professional financial media account.
 
-The content should be:
+Tone:
 
-- concise
 - credible
+- concise
+- factual
 - informative
-- easy to understand
-- engaging
 - investor-focused
-- suitable for Instagram, Facebook and X
+- easy to understand
+- engaging but not sensational
 
-The most important goal is:
+The goal is:
 
-Explain WHAT happened and WHY it matters.
+WHAT happened?
+WHY does it matter?
 
-Do not turn ordinary news into sensational breaking news.
+Do not manufacture urgency.
 
-If several articles discuss the same event, combine them
-instead of repeating the same information.
-
-Prioritize the most important and market-relevant story.
+Do not call something "breaking" unless the supplied
+information clearly supports that characterization.
 
 ============================================================
-RETURN EXACTLY THIS FORMAT
+OUTPUT FORMAT
 ============================================================
+
+Return EXACTLY this format:
 
 HEADLINE:
 <short professional headline>
@@ -407,22 +589,30 @@ SENTIMENT:
 <BULLISH / BEARISH / MIXED / NEUTRAL>
 
 CAPTION:
-<social-media-ready caption>
+<Instagram/Facebook/X-ready caption>
 
 HASHTAGS:
 <8-12 relevant hashtags>
 
 SOURCE:
-<source names>
+<source name>
+
+URL:
+<original selected article URL>
+
+SELECTED_STORY:
+<CANDIDATE NEWS number selected>
 
 ============================================================
-REAL NEWS DATA
+CANDIDATE NEWS
 ============================================================
 
 {news_text}
 """
 
-    print("Sending request to Gemini...")
+    print(
+        "Sending request to Gemini..."
+    )
 
     interaction = client.interactions.create(
         model="gemini-3.6-flash",
@@ -450,28 +640,29 @@ def main():
     print("US MARKET AUTO NEWS")
     print("=" * 70)
 
-    now_et = datetime.now(ET)
+    now_et = datetime.now(
+        ET
+    )
 
     print(
-        f"US Eastern Time: "
-        f"{now_et.strftime('%Y-%m-%d %I:%M:%S %p ET')}"
+        "US Eastern Time: "
+        + now_et.strftime(
+            "%Y-%m-%d %I:%M:%S %p ET"
+        )
     )
 
     # --------------------------------------------------------
-    # DETERMINE MARKET SLOT
+    # DETERMINE SLOT
     # --------------------------------------------------------
 
     slot = get_market_slot()
-
-    # --------------------------------------------------------
-    # MANUAL WORKFLOW RUN
-    # --------------------------------------------------------
 
     github_event = os.environ.get(
         "GITHUB_EVENT_NAME",
         ""
     )
 
+    # Manual testing is always allowed.
     if github_event == "workflow_dispatch":
 
         slot = "MANUAL"
@@ -481,7 +672,7 @@ def main():
         )
 
     # --------------------------------------------------------
-    # SCHEDULED RUN AT WRONG DST DUPLICATE TIME
+    # SAFETY EXIT
     # --------------------------------------------------------
 
     if not slot:
@@ -505,13 +696,13 @@ def main():
     # --------------------------------------------------------
 
     print(
-        "\n[1/3] Fetching US market news..."
+        "\n[1/4] Fetching recent US market news..."
     )
 
     articles = get_market_news()
 
     print(
-        f"Received {len(articles)} news articles."
+        f"Received {len(articles)} articles."
     )
 
     # --------------------------------------------------------
@@ -519,11 +710,24 @@ def main():
     # --------------------------------------------------------
 
     print(
-        "\n[2/3] Preparing news for AI..."
+        "\n[2/4] Ranking market-relevant stories..."
     )
 
-    news_text = prepare_news(
-        articles
+    selected_articles = (
+        select_best_articles(
+            articles
+        )
+    )
+
+    if not selected_articles:
+
+        raise RuntimeError(
+            "Could not select market news candidates"
+        )
+
+    print(
+        f"Selected {len(selected_articles)} "
+        "candidate stories for AI."
     )
 
     # --------------------------------------------------------
@@ -531,7 +735,19 @@ def main():
     # --------------------------------------------------------
 
     print(
-        "\n[3/3] Generating post with Gemini..."
+        "\n[3/4] Preparing news for AI..."
+    )
+
+    news_text = prepare_news(
+        selected_articles
+    )
+
+    # --------------------------------------------------------
+    # STEP 4
+    # --------------------------------------------------------
+
+    print(
+        "\n[4/4] Generating ONE story with Gemini..."
     )
 
     post = generate_post(
@@ -544,6 +760,7 @@ def main():
     # --------------------------------------------------------
 
     print("\n")
+
     print("=" * 70)
     print("GENERATED POST")
     print("=" * 70)
