@@ -3,8 +3,28 @@ name: US Market News Generator
 on:
   workflow_dispatch:
 
+  schedule:
+    # Pre-Market: 8:30 AM ET
+    - cron: "30 12 * * 1-5"
+    - cron: "30 13 * * 1-5"
+
+    # After Open: 10:00 AM ET
+    - cron: "0 14 * * 1-5"
+    - cron: "0 15 * * 1-5"
+
+    # Mid-Market: 1:00 PM ET
+    - cron: "0 17 * * 1-5"
+    - cron: "0 18 * * 1-5"
+
+    # After Close: 4:15 PM ET
+    - cron: "15 20 * * 1-5"
+    - cron: "15 21 * * 1-5"
+
+
 jobs:
+
   generate-news:
+
     runs-on: ubuntu-latest
 
     steps:
