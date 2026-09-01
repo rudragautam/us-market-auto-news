@@ -47,7 +47,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Generate and upload US market video
+      - name: Generate video and upload to YouTube
         env:
           MARKETAUX_API_KEY: ${{ secrets.MARKETAUX_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -55,12 +55,13 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           YOUTUBE_PRIVACY_STATUS: private
-        run: python main.py
+        run: |
+          python main.py
 
-      - name: Upload generated files
+      - name: Upload generated output
         uses: actions/upload-artifact@v4
         with:
-          name: us-market-news-output-${{ github.run_number }}
+          name: us-market-news-v2-${{ github.run_number }}
           path: output/
           if-no-files-found: error
           retention-days: 7
