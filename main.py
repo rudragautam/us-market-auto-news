@@ -1,9 +1,9 @@
 import os
-import base64
+import requests
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
-import requests
 from google import genai
 
 
@@ -13,6 +13,7 @@ from google import genai
 
 MARKETAUX_API_KEY = os.environ.get("MARKETAUX_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+POLLINATIONS_API_KEY = os.environ.get("POLLINATIONS_API_KEY")
 
 if not MARKETAUX_API_KEY:
     raise RuntimeError("MARKETAUX_API_KEY secret is missing")
@@ -20,26 +21,49 @@ if not MARKETAUX_API_KEY:
 if not GEMINI_API_KEY:
     raise RuntimeError("GEMINI_API_KEY secret is missing")
 
+if not POLLINATIONS_API_KEY:
+    raise RuntimeError("POLLINATIONS_API_KEY secret is missing")
+
 
 # ============================================================
-# MODELS
+# CONFIGURATION
 # ============================================================
 
 TEXT_MODEL = "gemini-3.6-flash"
 
-# Nano Banana 2 - Gemini native image generation
-IMAGE_MODEL = "gemini-3.1-flash-image"
-
-
-# ============================================================
-# OUTPUT DIRECTORY
-# ============================================================
+ET = ZoneInfo("America/New_York")
 
 OUTPUT_DIR = Path("output")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 POST_FILE = OUTPUT_DIR / "market_news_post.txt"
 IMAGE_FILE = OUTPUT_DIR / "market_news.png"
+
+
+# ============================================================
+# MARKET SLOT
+# ============================================================
+
+def get_market_slot():
+
+    now_et = datetime.now(ET)
+
+    hour = now_et.hour
+    minute = now_et.minute
+
+    if hour == 8 and minute == 30:
+        return "PRE_MARKET"
+
+    if hour == 10 and minute == 0:
+        return "MARKET_OPEN"
+
+    if hour == 13 and minute == 0:
+        return "MID_MARKET"
+
+    if hour == 16 and minute == 15:
+        return "MARKET_CLOSE"
+
+    return None
 
 
 # ============================================================
@@ -56,7 +80,7 @@ def get_market_news():
         "language": "en",
         "filter_entities": "true",
         "must_have_entities": "true",
-        "limit": 10,
+        "limit": 3,
     }
 
     print("Requesting Marketaux news...")
@@ -66,6 +90,10 @@ def get_market_news():
         params=params,
         timeout=30
     )
+
+    if not response.ok:
+        print("Marketaux API Error:")
+        print(response.text)
 
     response.raise_for_status()
 
@@ -82,28 +110,61 @@ def get_market_news():
 
 
 # ============================================================
-# PREPARE NEWS FOR AI
+# PREPARE NEWS
 # ============================================================
 
 def prepare_news(articles):
 
     news_text = []
 
-    for index, article in enumerate(articles, start=1):
+    for index, article in enumerate(
+        articles,
+        start=1
+    ):
 
-        title = article.get("title", "")
-        description = article.get("description", "")
-        source = article.get("source", "")
-        published_at = article.get("published_at", "")
-        url = article.get("url", "")
+        title = article.get(
+            "title",
+            ""
+        )
+
+        description = article.get(
+            "description",
+            ""
+        )
+
+        source = article.get(
+            "source",
+            ""
+        )
+
+        published_at = article.get(
+            "published_at",
+            ""
+        )
+
+        url = article.get(
+            "url",
+            ""
+        )
 
         entities = []
 
-        for entity in article.get("entities", []):
+        for entity in article.get(
+            "entities",
+            []
+        ):
 
-            symbol = entity.get("symbol")
-            name = entity.get("name")
-            sentiment = entity.get("sentiment_score")
+            symbol = entity.get(
+                "symbol"
+            )
+
+            name = entity.get(
+                "name"
+            )
+
+            sentiment = entity.get(
+                "sentiment_score"
+            )
 
             if symbol or name:
 
@@ -113,31 +174,35 @@ def prepare_news(articles):
                     f"sentiment={sentiment}"
                 )
 
-        entity_text = ", ".join(entities)
+        entity_text = ", ".join(
+            entities
+        )
 
         news_text.append(
             f"""
+============================================================
 NEWS {index}
+============================================================
 
-Title:
+TITLE:
 {title}
 
-Description:
+DESCRIPTION:
 {description}
 
-Source:
+SOURCE:
 {source}
 
-Published:
+PUBLISHED:
 {published_at}
 
-Entities:
+ENTITIES:
 {entity_text}
 
 URL:
 {url}
 
---------------------------------------------------
+============================================================
 """
         )
 
@@ -145,56 +210,106 @@ URL:
 
 
 # ============================================================
-# GENERATE TEXT POST
+# GEMINI TEXT GENERATION
 # ============================================================
 
-def generate_post(news_text):
+def generate_post(news_text, slot):
 
     client = genai.Client(
         api_key=GEMINI_API_KEY
     )
 
-    current_time = datetime.now(
-        timezone.utc
-    ).strftime("%Y-%m-%d %H:%M UTC")
+    now_et = datetime.now(
+        ET
+    ).strftime(
+        "%Y-%m-%d %I:%M %p ET"
+    )
 
     prompt = f"""
-You are a professional US stock market news editor.
+You are a professional US financial news editor.
 
-Current UTC time:
-{current_time}
+CURRENT US EASTERN TIME:
+{now_et}
 
-Below is REAL market news retrieved from Marketaux.
+POST SLOT:
+{slot}
 
-Create ONE social-media-ready US market news post.
+============================================================
+VERY IMPORTANT
+============================================================
 
-IMPORTANT RULES:
+You have multiple candidate news articles.
 
-1. Use ONLY facts present in the supplied news.
-2. NEVER invent stock prices.
-3. NEVER invent percentages.
-4. NEVER invent earnings numbers.
-5. NEVER invent Fed statements.
-6. NEVER invent company announcements.
-7. NEVER invent dates or statistics.
-8. Do not present speculation as fact.
-9. If information is insufficient, say so.
-10. Do not copy article text word-for-word.
-11. Keep the writing concise and engaging.
-12. Focus on why the news matters to investors.
-13. Mention company/ticker when available.
-14. Do not give financial advice.
-15. Do not say:
-    buy
-    sell
-    guaranteed
-    will rise
-    will crash
+SELECT EXACTLY ONE PRIMARY STORY.
 
-Return exactly this format:
+Do NOT combine unrelated stories.
+
+If stories are about different events,
+choose only ONE.
+
+All sections of the final post must be based
+on the SAME selected story.
+
+============================================================
+FACTUAL ACCURACY
+============================================================
+
+Use ONLY information supplied in the selected article.
+
+Never invent:
+
+- stock prices
+- percentage changes
+- earnings numbers
+- revenue
+- guidance
+- Fed statements
+- analyst targets
+- statistics
+- quotes
+- dates
+- company announcements
+
+Do not give financial advice.
+
+Do not say:
+
+buy
+sell
+guaranteed
+will rise
+will crash
+risk-free
+
+Do not copy the article word-for-word.
+
+============================================================
+STYLE
+============================================================
+
+Professional financial journalism.
+
+Concise.
+Credible.
+Investor-focused.
+Easy to understand.
+
+Explain:
+
+WHAT happened?
+
+WHY does it matter?
+
+Do not use sensational or misleading language.
+
+============================================================
+OUTPUT FORMAT
+============================================================
+
+Return exactly:
 
 HEADLINE:
-<short headline>
+<short professional headline>
 
 HOOK:
 <one sentence>
@@ -206,25 +321,36 @@ WHY_IT_MATTERS:
 <2-3 sentences>
 
 TICKERS:
-<ticker list, or N/A>
+<ticker list or N/A>
 
 SENTIMENT:
 <BULLISH / BEARISH / MIXED / NEUTRAL>
 
 CAPTION:
-<Instagram/Facebook-ready caption>
+<social-media-ready caption>
 
 HASHTAGS:
 <8-12 relevant hashtags>
 
 SOURCE:
-<source names>
+<source name>
 
-NEWS DATA:
+URL:
+<original article URL>
+
+SELECTED_STORY:
+<NEWS number>
+
+============================================================
+NEWS
+============================================================
+
 {news_text}
 """
 
-    print("Connecting to Gemini text model...")
+    print(
+        "Connecting to Gemini text model..."
+    )
 
     interaction = client.interactions.create(
         model=TEXT_MODEL,
@@ -236,14 +362,14 @@ NEWS DATA:
 
     if not post:
         raise RuntimeError(
-            "Gemini returned empty text response"
+            "Gemini returned empty response"
         )
 
     return post
 
 
 # ============================================================
-# SAVE TEXT POST
+# SAVE POST
 # ============================================================
 
 def save_post(post):
@@ -259,116 +385,174 @@ def save_post(post):
 
 
 # ============================================================
-# EXTRACT HEADLINE
+# EXTRACT INFORMATION
 # ============================================================
 
-def extract_headline(post):
-
-    headline = "US Market News"
+def extract_field(
+    post,
+    field_name
+):
 
     for line in post.splitlines():
 
-        if line.startswith("HEADLINE:"):
+        if line.startswith(
+            field_name + ":"
+        ):
 
-            value = line.replace(
-                "HEADLINE:",
-                "",
+            return line.split(
+                ":",
                 1
-            ).strip()
+            )[1].strip()
 
-            if value:
-                headline = value
-
-            break
-
-    return headline
+    return ""
 
 
 # ============================================================
-# GENERATE AI IMAGE
+# GENERATE IMAGE USING POLLINATIONS
 # ============================================================
 
-def generate_market_image(post):
+def generate_market_image(post, slot):
 
-    client = genai.Client(
-        api_key=GEMINI_API_KEY
+    headline = extract_field(
+        post,
+        "HEADLINE"
     )
 
-    headline = extract_headline(post)
+    tickers = extract_field(
+        post,
+        "TICKERS"
+    )
+
+    sentiment = extract_field(
+        post,
+        "SENTIMENT"
+    )
+
+    print(
+        "Generating image using Pollinations..."
+    )
+
+    # --------------------------------------------------------
+    # Professional financial-news image prompt
+    # --------------------------------------------------------
 
     image_prompt = f"""
-Create a premium professional US financial news graphic
-for a social media post.
+Create a premium professional US financial news graphic.
 
-NEWS HEADLINE:
+HEADLINE:
 {headline}
 
-NEWS CONTEXT:
-{post}
+TICKERS:
+{tickers}
 
-VISUAL STYLE:
+SENTIMENT:
+{sentiment}
 
-- Professional financial-news journalism
-- Bloomberg / Reuters / CNBC inspired visual language
-- Premium editorial composition
-- Modern Wall Street atmosphere
-- US financial markets theme
-- Realistic cinematic lighting
-- Sophisticated dark financial-news aesthetic
-- Strong visual hierarchy
-- Clean composition
-- Suitable for Instagram and Facebook
-- 16:9 landscape composition
+POST SLOT:
+{slot}
 
-IMPORTANT FACTUAL RULES:
+VISUAL DIRECTION:
 
-- Do NOT invent stock prices.
-- Do NOT invent percentages.
-- Do NOT invent financial numbers.
-- Do NOT create fake charts containing numbers.
-- Do NOT create fake statistics.
-- Do NOT imply information that is not contained
-  in the supplied news.
+Professional financial journalism aesthetic.
 
-TEXT ON IMAGE:
+Modern Wall Street newsroom atmosphere.
 
-Use the supplied headline as the main headline.
+New York Stock Exchange inspired environment.
 
-Keep the headline short, clean and highly readable.
+Premium editorial photography.
 
-Do NOT add paragraphs of text.
+Cinematic lighting.
 
-Do NOT add fake ticker prices.
+Realistic financial-market environment.
 
-Do NOT add fake financial data.
+Elegant dark blue and black financial-news visual style.
 
-Create a visually compelling editorial image that
-communicates the subject of the news without inventing facts.
+Subtle stock-market screens in the background.
+
+No fake numerical data.
+
+No fake stock prices.
+
+No fake percentages.
+
+No fake charts.
+
+No fake financial statistics.
+
+The main headline must be clearly visible.
+
+Create a strong visual hierarchy.
+
+The headline should be short, clean and readable.
+
+Use professional typography.
+
+Do not add paragraphs.
+
+Do not add unrelated companies.
+
+Do not add unrelated logos.
+
+Do not invent facts.
+
+The image should look like a professionally produced
+Bloomberg / Reuters / CNBC-style financial news graphic.
+
+16:9 landscape composition.
 """
 
-    print("Generating AI market image...")
-
-    interaction = client.interactions.create(
-        model=IMAGE_MODEL,
-        input=image_prompt,
-        response_format={
-            "type": "image",
-            "aspect_ratio": "16:9",
-        },
+    # URL encode prompt automatically through requests
+    url = "https://gen.pollinations.ai/image/" + requests.utils.quote(
+        image_prompt,
+        safe=""
     )
 
-    generated_image = interaction.output_image
+    headers = {
+        "Authorization": f"Bearer {POLLINATIONS_API_KEY}",
+        "Accept": "image/png",
+    }
 
-    if not generated_image:
-        raise RuntimeError(
-            "Gemini did not return an image"
+    params = {
+        "model": "flux",
+        "width": 1280,
+        "height": 720,
+        "nologo": "true",
+    }
+
+    response = requests.get(
+        url,
+        headers=headers,
+        params=params,
+        timeout=180
+    )
+
+    if not response.ok:
+
+        print(
+            "Pollinations API Error:"
         )
 
-    image_data = base64.b64decode(
-        generated_image.data
-    )
+        print(
+            response.text
+        )
 
-    IMAGE_FILE.write_bytes(image_data)
+        response.raise_for_status()
+
+    content_type = response.headers.get(
+        "content-type",
+        ""
+    ).lower()
+
+    if "image" not in content_type:
+
+        raise RuntimeError(
+            "Pollinations did not return an image. "
+            f"Content-Type: {content_type}"
+        )
+
+    IMAGE_FILE.write_bytes(
+        response.content
+    )
 
     print(
         f"AI image saved: {IMAGE_FILE}"
@@ -385,7 +569,60 @@ def main():
     print("US MARKET AUTO NEWS")
     print("=" * 70)
 
-    print("\n[1/4] Fetching US market news...")
+    now_et = datetime.now(
+        ET
+    )
+
+    print(
+        "US Eastern Time: "
+        + now_et.strftime(
+            "%Y-%m-%d %I:%M:%S %p ET"
+        )
+    )
+
+    # --------------------------------------------------------
+    # MARKET SLOT
+    # --------------------------------------------------------
+
+    slot = get_market_slot()
+
+    github_event = os.environ.get(
+        "GITHUB_EVENT_NAME",
+        ""
+    )
+
+    # Manual testing
+    if github_event == "workflow_dispatch":
+
+        slot = "MANUAL"
+
+        print(
+            "\nManual workflow detected."
+        )
+
+    if not slot:
+
+        print(
+            "\nNo valid market-news slot."
+        )
+
+        print(
+            "Exiting."
+        )
+
+        return
+
+    print(
+        f"\nPOST SLOT: {slot}"
+    )
+
+    # --------------------------------------------------------
+    # STEP 1
+    # --------------------------------------------------------
+
+    print(
+        "\n[1/4] Fetching US market news..."
+    )
 
     articles = get_market_news()
 
@@ -393,33 +630,59 @@ def main():
         f"Received {len(articles)} news articles."
     )
 
-    print("\n[2/4] Preparing news for AI...")
+    # --------------------------------------------------------
+    # STEP 2
+    # --------------------------------------------------------
+
+    print(
+        "\n[2/4] Preparing news for AI..."
+    )
 
     news_text = prepare_news(
         articles
     )
 
-    print("\n[3/4] Generating text post...")
+    # --------------------------------------------------------
+    # STEP 3
+    # --------------------------------------------------------
 
-    post = generate_post(
-        news_text
+    print(
+        "\n[3/4] Generating text post..."
     )
 
-    save_post(post)
+    post = generate_post(
+        news_text,
+        slot
+    )
+
+    save_post(
+        post
+    )
 
     print("\n")
     print("=" * 70)
     print("GENERATED POST")
     print("=" * 70)
 
-    print(post)
+    print(
+        post
+    )
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
-    print("\n[4/4] Generating AI image...")
+    # --------------------------------------------------------
+    # STEP 4
+    # --------------------------------------------------------
+
+    print(
+        "\n[4/4] Generating AI image..."
+    )
 
     generate_market_image(
-        post
+        post,
+        slot
     )
 
     print("\n")
@@ -428,15 +691,21 @@ def main():
     print("=" * 70)
 
     print(
-        f"Text:  {POST_FILE}"
+        f"Text file : {POST_FILE}"
     )
 
     print(
-        f"Image: {IMAGE_FILE}"
+        f"Image file: {IMAGE_FILE}"
     )
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
 
 if __name__ == "__main__":
     main()
