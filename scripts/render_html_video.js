@@ -19,6 +19,7 @@ async function main() {
   });
   const page = await context.newPage();
   await page.goto('file://' + path.resolve(htmlPath), { waitUntil: 'load' });
+  await page.setViewportSize({ width: 1080, height: 1920 });
 
   await page.evaluate((d) => {
     document.body.classList.add('render-mode');
@@ -51,7 +52,7 @@ async function main() {
   }, data);
 
   await page.waitForFunction(() => window.__THE_THIRD_EYE_READY__ === true);
-  await page.waitForTimeout(34700);
+  await page.waitForTimeout(35000);
   const videoPath = await page.video().path();
   await context.close();
   await browser.close();
