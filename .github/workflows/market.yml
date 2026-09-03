@@ -47,6 +47,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install browser renderer
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+
       - name: Generate video and upload to YouTube
         env:
           MARKETAUX_API_KEY: ${{ secrets.MARKETAUX_API_KEY }}
