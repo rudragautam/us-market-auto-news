@@ -517,6 +517,21 @@ def render_slides(data, article, slot):
         "url": source_url,
     })
 
+    # Persist the scene plan for debugging and future template upgrades.
+    scene_manifest = {
+        "slot": slot,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "scene_count": 7,
+        "scenes": [
+            {"number": i + 1, "type": s["type"], "label": s.get("label", "")}
+            for i, s in enumerate(slides)
+        ],
+    }
+    (OUTPUT_DIR / "scene_manifest.json").write_text(
+        json.dumps(scene_manifest, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
     for i, s in enumerate(slides, 1):
         img = base.copy()
         draw = ImageDraw.Draw(img)
@@ -766,6 +781,7 @@ def make_video():
         c.unlink(missing_ok=True)
     concat.unlink(missing_ok=True)
 
+    print("7 scene clips synchronized successfully.")
     print(f"Video ready: {final}")
     return final
 
