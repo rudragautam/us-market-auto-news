@@ -7,7 +7,6 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import requests
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 from google import genai
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -26,7 +25,6 @@ YOUTUBE_CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
 YOUTUBE_REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
 
 OUTPUT_DIR = Path("output")
-TEMPLATE_PATH = Path("templates/master.png")
 STATE_PATH = Path("data/posted_news.json")
 
 WIDTH, HEIGHT = 1080, 1920
@@ -358,430 +356,130 @@ def parse_fields(text):
 
 
 # ============================================================
-# VISUAL RENDERING
+# HTML TEMPLATE RENDERING
 # ============================================================
 
-def make_base():
-    if not TEMPLATE_PATH.exists():
-        raise RuntimeError(f"Missing {TEMPLATE_PATH}")
-
-    base = ImageOps.fit(
-        Image.open(TEMPLATE_PATH).convert("RGB"),
-        (WIDTH, HEIGHT),
-        method=Image.Resampling.LANCZOS,
-    )
-
-    # Darkened copy for readable typography.
-    dark = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 80))
-    return Image.alpha_composite(base.convert("RGBA"), dark)
+HTML_TEMPLATE_PATH = Path("templates/market_template.html")
 
 
-def add_header(draw, slot, number):
-    draw.text(
-        (65, 60),
-        "THE THIRD EYE",
-        font=font(32, True),
-        fill=(255, 255, 255, 245),
-    )
-
-    draw.text(
-        (65, 105),
-        "US MARKET NEWS",
-        font=font(24, True),
-        fill=(170, 210, 245, 230),
-    )
-
-    counter = f"{number:02d} / 07"
-    bbox = draw.textbbox((0, 0), counter, font=font(27, True))
-    draw.text(
-        (1015 - (bbox[2] - bbox[0]), 65),
-        counter,
-        font=font(27, True),
-        fill=(220, 235, 250, 230),
-    )
-
-    # Slot pill.
-    pill = slot.upper()
-    pf = font(24, True)
-    pw = draw.textbbox((0, 0), pill, font=pf)[2] + 34
-    draw.rounded_rectangle(
-        (65, 155, 65 + pw, 200),
-        radius=22,
-        fill=(10, 35, 65, 225),
-        outline=(100, 190, 255, 180),
-        width=2,
-    )
-    draw.text((82, 163), pill, font=pf, fill=(220, 240, 255, 255))
+def bullet_list(text):
+    parts = re.split(r"[\n•]+", str(text or ""))
+    parts = [clean(x).lstrip("-*").strip() for x in parts if clean(x)]
+    return parts[:3]
 
 
-def add_panel(draw, y1=275, y2=1600):
-    draw.rounded_rectangle(
-        (50, y1, 1030, y2),
-        radius=38,
-        fill=(3, 12, 27, 218),
-        outline=(120, 190, 245, 90),
-        width=2,
+def html_escape(text):
+    text = str(text or "")
+    return (
+        text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+            .replace("'", "&#39;")
     )
 
 
-def add_footer(draw):
-    draw.text(
-        (65, 1800),
-        "NEWS SUMMARY  •  NOT FINANCIAL ADVICE",
-        font=font(25, True),
-        fill=(205, 220, 235, 205),
-    )
+def render_html_template(data, article, slot):
+    if not HTML_TEMPLATE_PATH.exists():
+        raise RuntimeError(f"Missing {HTML_TEMPLATE_PATH}")
 
-
-def render_slides(data, article, slot):
-    base = make_base()
-
-    headline = data.get("HEADLINE") or "US Market Update"
-    hook = data.get("HOOK") or headline
     what = bullet_list(data.get("WHAT_HAPPENED"))
     why = bullet_list(data.get("WHY_IT_MATTERS"))
     tickers = ticker_list(data.get("TICKERS"))
-    sentiment = data.get("SENTIMENT") or "NEUTRAL"
-    signal = data.get("KEY_SIGNAL") or "N/A"
-    source = data.get("SOURCE") or clean(article.get("source")) or "Marketaux"
+    sentiment = clean(data.get("SENTIMENT")).upper() or "NEUTRAL"
+    signal = clean(data.get("KEY_SIGNAL")) or "N/A"
+    source = clean(data.get("SOURCE")) or clean(article.get("source")) or "Marketaux"
     source_url = clean(article.get("url"))
+    caption = clean(data.get("CAPTION")) or clean(data.get("HOOK"))
 
-    raw_numbers = " ".join([
-        clean(article.get("title")),
-        clean(article.get("description")),
-        signal,
-    ])
-    metrics = extract_metrics(raw_numbers)
+    sentiment_text = {
+        "BULLISH": "Positive market tone is visible in the selected story.",
+        "BEARISH": "Negative market tone is visible in the selected story.",
+        "MIXED": "The selected story carries mixed signals for investors.",
+        "NEUTRAL": "The selected story does not clearly favor either direction.",
+    }.get(sentiment, "The selected story does not clearly favor either direction.")
 
-    slides = []
-
-    # 1 — COVER
-    slides.append({
-        "type": "cover",
-        "label": "BREAKING MARKET STORY",
-        "title": headline,
-        "body": hook,
-        "tickers": tickers,
-        "sentiment": sentiment,
-    })
-
-    # 2 — HOOK / SIGNAL
-    slides.append({
-        "type": "signal",
-        "label": "THE SIGNAL",
-        "title": signal if signal != "N/A" else "Why the market is watching",
-        "body": hook,
-        "metrics": metrics,
-    })
-
-    # 3 — WHAT HAPPENED
-    slides.append({
-        "type": "bullets",
-        "label": "WHAT HAPPENED",
-        "title": "The key facts",
-        "bullets": what,
-    })
-
-    # 4 — WHY IT MATTERS
-    slides.append({
-        "type": "bullets",
-        "label": "WHY IT MATTERS",
-        "title": "What investors are watching",
-        "bullets": why,
-    })
-
-    # 5 — STOCKS
-    slides.append({
-        "type": "stocks",
-        "label": "STOCKS TO WATCH",
-        "title": tickers[0] if tickers else "US EQUITIES",
-        "tickers": tickers,
-        "body": "Companies explicitly mentioned in the selected story.",
-    })
-
-    # 6 — TAKEAWAY
-    slides.append({
-        "type": "takeaway",
-        "label": "MARKET TAKEAWAY",
-        "title": sentiment,
-        "body": signal if signal != "N/A" else hook,
-        "tickers": tickers,
-    })
-
-    # 7 — SOURCE / CTA
-    slides.append({
-        "type": "source",
-        "label": "SOURCE",
-        "title": source,
-        "body": "Follow for the next US market move.",
-        "url": source_url,
-    })
-
-    # Persist the scene plan for debugging and future template upgrades.
-    scene_manifest = {
-        "slot": slot,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "scene_count": 7,
-        "scenes": [
-            {"number": i + 1, "type": s["type"], "label": s.get("label", "")}
-            for i, s in enumerate(slides)
-        ],
+    values = {
+        "HEADLINE": clean(data.get("HEADLINE")) or "US Market Update",
+        "HOOK": clean(data.get("HOOK")),
+        "WHAT_1": what[0] if len(what) > 0 else "Key development reported in the selected story.",
+        "WHAT_2": what[1] if len(what) > 1 else "Investors are assessing the potential market impact.",
+        "WHAT_3": what[2] if len(what) > 2 else "Company and sector sentiment remain in focus.",
+        "WHY_1": why[0] if len(why) > 0 else "The development may affect investor expectations.",
+        "WHY_2": why[1] if len(why) > 1 else "Markets are watching the next company update.",
+        "WHY_3": why[2] if len(why) > 2 else "Further headlines could move the sector.",
+        "TICKER_1": "$" + tickers[0] if len(tickers) > 0 else "N/A",
+        "TICKER_2": "$" + tickers[1] if len(tickers) > 1 else "—",
+        "TICKER_3": "$" + tickers[2] if len(tickers) > 2 else "—",
+        "TICKER_4": "$" + tickers[3] if len(tickers) > 3 else "—",
+        "MOVE_1": "WATCH", "MOVE_2": "WATCH", "MOVE_3": "WATCH", "MOVE_4": "WATCH",
+        "SENTIMENT": sentiment,
+        "SENTIMENT_TEXT": sentiment_text,
+        "CAPTION": caption,
+        "KEY_SIGNAL": signal,
+        "TAKEAWAY": signal if signal != "N/A" else clean(data.get("WHY_IT_MATTERS")) or clean(data.get("HOOK")),
+        "SOURCE": source,
+        "HASHTAGS": clean(data.get("HASHTAGS")),
+        "SOURCE_URL": source_url,
+        "SLOT": slot,
     }
-    (OUTPUT_DIR / "scene_manifest.json").write_text(
-        json.dumps(scene_manifest, indent=2, ensure_ascii=False),
+
+    # The HTML renderer performs the final text replacement in the browser.
+    # Keep JSON separately so the Node renderer can inject escaped values safely.
+    rendered = OUTPUT_DIR / "market_template.html"
+    rendered.write_text(
+        HTML_TEMPLATE_PATH.read_text(encoding="utf-8"),
         encoding="utf-8",
     )
-
-    for i, s in enumerate(slides, 1):
-        img = base.copy()
-        draw = ImageDraw.Draw(img)
-        add_header(draw, slot, i)
-
-        if s["type"] == "cover":
-            add_panel(draw, 285, 1640)
-
-            lf = font(28, True)
-            draw.text((85, 335), s["label"], font=lf, fill=(95, 195, 255, 255))
-
-            tf = fit_font(draw, s["title"], 900, 86, 48, True)
-            y = draw_lines(draw, s["title"], 85, 410, 900, tf, (255,255,255,255), 18)
-
-            draw_lines(
-                draw, s["body"], 85, y + 70, 900,
-                font(42, False), (210, 225, 240, 255), 16, 4
-            )
-
-            if s["tickers"]:
-                x = 85
-                y2 = 1370
-                for t in s["tickers"]:
-                    tw = draw.textbbox((0,0), f"${t}", font=font(34, True))[2] + 50
-                    draw.rounded_rectangle(
-                        (x, y2, x+tw, y2+62),
-                        radius=28,
-                        fill=(15, 60, 100, 230),
-                        outline=(100, 200, 255, 160),
-                        width=2
-                    )
-                    draw.text((x+25, y2+12), f"${t}", font=font(34, True), fill="white")
-                    x += tw + 15
-
-            draw.text(
-                (85, 1510),
-                s["sentiment"].upper(),
-                font=font(40, True),
-                fill=(255, 220, 120, 255),
-            )
-
-        elif s["type"] == "signal":
-            add_panel(draw)
-            draw.text((85, 335), s["label"], font=font(28, True), fill=(95,195,255,255))
-
-            title = s["title"]
-            tf = fit_font(draw, title, 900, 82, 48, True)
-            draw_lines(draw, title, 85, 420, 900, tf, "white", 16, 3)
-
-            y = 730
-            for metric in s["metrics"][:3]:
-                draw.rounded_rectangle(
-                    (85, y, 995, y+150),
-                    radius=28,
-                    fill=(10, 32, 58, 235),
-                    outline=(90, 170, 230, 120),
-                    width=2,
-                )
-                draw.text((120, y+35), metric, font=font(65, True), fill=(255,255,255,255))
-                y += 180
-
-            draw_lines(
-                draw, s["body"], 85, 1320, 900,
-                font(38, False), (215,230,242,255), 16, 4
-            )
-
-        elif s["type"] == "bullets":
-            add_panel(draw)
-            draw.text((85, 335), s["label"], font=font(28, True), fill=(95,195,255,255))
-
-            tf = fit_font(draw, s["title"], 900, 72, 48, True)
-            draw_lines(draw, s["title"], 85, 420, 900, tf, "white", 15, 2)
-
-            y = 700
-            for bullet in s["bullets"][:3]:
-                draw.ellipse((90, y+10, 112, y+32), fill=(90,190,255,255))
-                y = draw_lines(
-                    draw, bullet, 145, y, 820,
-                    font(42, False), (230,238,247,255), 14, 2
-                ) + 55
-
-        elif s["type"] == "stocks":
-            add_panel(draw)
-            draw.text((85, 335), s["label"], font=font(28, True), fill=(95,195,255,255))
-
-            big = s["title"]
-            draw.text((85, 430), f"${big}", font=font(110, True), fill=(255,255,255,255))
-
-            y = 620
-            for t in s["tickers"][:5]:
-                draw.rounded_rectangle(
-                    (85, y, 995, y+115),
-                    radius=26,
-                    fill=(8, 29, 53, 235),
-                    outline=(80, 165, 225, 110),
-                    width=2,
-                )
-                draw.text((120, y+28), f"${t}", font=font(50, True), fill=(245,250,255,255))
-                y += 145
-
-            draw_lines(
-                draw, s["body"], 85, 1390, 900,
-                font(34, False), (200,220,235,255), 12, 3
-            )
-
-        elif s["type"] == "takeaway":
-            add_panel(draw)
-            draw.text((85, 335), s["label"], font=font(28, True), fill=(95,195,255,255))
-
-            draw.text(
-                (85, 470),
-                s["title"].upper(),
-                font=font(105, True),
-                fill=(255, 220, 120, 255),
-            )
-
-            draw_lines(
-                draw, s["body"], 85, 720, 900,
-                font(48, False), (230,240,248,255), 18, 5
-            )
-
-            if s["tickers"]:
-                draw.text(
-                    (85, 1250),
-                    "MENTIONED",
-                    font=font(26, True),
-                    fill=(150,190,220,255)
-                )
-                draw.text(
-                    (85, 1310),
-                    "  ".join(f"${x}" for x in s["tickers"]),
-                    font=font(55, True),
-                    fill=(255,255,255,255)
-                )
-
-        elif s["type"] == "source":
-            add_panel(draw)
-            draw.text((85, 335), s["label"], font=font(28, True), fill=(95,195,255,255))
-
-            tf = fit_font(draw, s["title"], 900, 76, 46, True)
-            draw_lines(draw, s["title"], 85, 450, 900, tf, "white", 16, 3)
-
-            draw_lines(
-                draw, s["body"], 85, 780, 900,
-                font(45, False), (220,235,245,255), 16, 3
-            )
-
-            if s["url"]:
-                draw.rounded_rectangle(
-                    (85, 1030, 995, 1260),
-                    radius=28,
-                    fill=(8, 25, 45, 240),
-                    outline=(80,165,225,100),
-                    width=2,
-                )
-                draw_lines(
-                    draw, s["url"], 120, 1080, 840,
-                    font(30, False), (180,210,235,255), 12, 5
-                )
-
-            draw.text(
-                (85, 1390),
-                "THE THIRD EYE",
-                font=font(52, True),
-                fill=(255,255,255,255)
-            )
-
-        add_footer(draw)
-
-        path = OUTPUT_DIR / f"slide_{i:02d}.png"
-        img.convert("RGB").save(path, quality=95)
-
-    print("Created 7 redesigned slides.")
-
-
-# ============================================================
-# ANIMATED VIDEO
-# ============================================================
-
-def make_video():
-    print("Rendering animated MP4...")
-
-    clips = []
-
-    for i in range(1, 8):
-        inp = OUTPUT_DIR / f"slide_{i:02d}.png"
-        clip = OUTPUT_DIR / f"_clip_{i:02d}.mp4"
-        clips.append(clip)
-
-        frames = SLIDE_SECONDS * FPS
-
-        # Gentle Ken-Burns zoom; no extra image API required.
-        vf = (
-            f"zoompan=z='min(zoom+0.00055,1.06)':"
-            f"d={frames}:"
-            f"x='iw/2-(iw/zoom/2)':"
-            f"y='ih/2-(ih/zoom/2)':"
-            f"s={WIDTH}x{HEIGHT}:fps={FPS},"
-            "format=yuv420p"
-        )
-
-        cmd = [
-            "ffmpeg", "-y",
-            "-loop", "1",
-            "-i", str(inp),
-            "-t", str(SLIDE_SECONDS),
-            "-vf", vf,
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-pix_fmt", "yuv420p",
-            "-an",
-            str(clip),
-        ]
-
-        subprocess.run(
-            cmd,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT,
-        )
-
-    concat = OUTPUT_DIR / "_concat.txt"
-    concat.write_text(
-        "".join(f"file '{c.name}'\n" for c in clips),
-        encoding="utf-8"
+    payload = OUTPUT_DIR / "market_template_data.json"
+    payload.write_text(
+        json.dumps(values, ensure_ascii=False, indent=2),
+        encoding="utf-8",
     )
+    return rendered, payload
 
+
+# ============================================================
+# HTML -> WEBM -> MP4
+# ============================================================
+
+
+def make_video(data, article, slot):
+    print("Rendering HTML/CSS animated Shorts video...")
+    html_path, data_path = render_html_template(data, article, slot)
+    webm_path = OUTPUT_DIR / "_html_render.webm"
     final = OUTPUT_DIR / "us_market_news.mp4"
+
+    # Node + Playwright capture the real browser animation at 1080x1920.
+    subprocess.run(
+        [
+            "node",
+            "scripts/render_html_video.js",
+            str(html_path.resolve()),
+            str(data_path.resolve()),
+            str(webm_path.resolve()),
+        ],
+        check=True,
+    )
 
     subprocess.run(
         [
             "ffmpeg", "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", concat.name,
-            "-c", "copy",
+            "-i", str(webm_path),
+            "-vf", f"scale={WIDTH}:{HEIGHT}:flags=lanczos,format=yuv420p",
+            "-r", str(FPS),
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "20",
             "-movflags", "+faststart",
-            final.name,
+            "-an",
+            str(final),
         ],
-        cwd=OUTPUT_DIR,
         check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.STDOUT,
     )
 
-    for c in clips:
-        c.unlink(missing_ok=True)
-    concat.unlink(missing_ok=True)
-
-    print("7 scene clips synchronized successfully.")
+    webm_path.unlink(missing_ok=True)
+    print("7 HTML scenes rendered successfully.")
     print(f"Video ready: {final}")
     return final
 
@@ -915,8 +613,7 @@ def main():
         encoding="utf-8"
     )
 
-    render_slides(data, article, slot)
-    video = make_video()
+    video = make_video(data, article, slot)
     upload(video, data, slot)
 
     url = clean(article.get("url"))
