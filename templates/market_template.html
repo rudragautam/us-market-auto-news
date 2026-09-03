@@ -17,12 +17,14 @@
   }
 
   *{box-sizing:border-box}
-  html,body{margin:0;background:#111;font-family:Arial,Helvetica,sans-serif}
-  body{display:flex;justify-content:center;padding:24px}
+  html,body{margin:0;background:#000;font-family:Arial,Helvetica,sans-serif}
+  body{width:1080px;height:1920px;overflow:hidden;padding:0;margin:0;display:block}
 
   .video{
     width:540px;
     height:960px;
+    transform:scale(2);
+    transform-origin:top left;
     position:relative;
     overflow:hidden;
     color:var(--white);
@@ -30,7 +32,7 @@
       radial-gradient(circle at 78% 18%, rgba(227,27,35,.22), transparent 25%),
       radial-gradient(circle at 20% 75%, rgba(20,76,120,.25), transparent 30%),
       linear-gradient(145deg,#02060b,#07131f 55%,#02050a);
-    box-shadow:0 20px 80px #000;
+    box-shadow:none;
   }
 
   /* subtle newsroom texture */
@@ -197,9 +199,7 @@
   @keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
   @keyframes chart{from{transform:translateX(-12px)}to{transform:translateX(12px)}}
 
-  @media(min-width:900px){
-    .video{width:540px;height:960px}
-  }
+  /* The design is authored on a 540x960 logical canvas and rendered at exactly 1080x1920. */
 body.render-mode .scene-controls{display:none !important}
 </style>
 </head>
