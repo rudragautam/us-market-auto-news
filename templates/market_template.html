@@ -182,7 +182,7 @@
     font-family:"Arial Narrow",Impact,Arial,sans-serif;font-size:90px;color:var(--red);line-height:.35;
   }
 
- .info-list{
+.info-list{
   margin-top:22px;
   display:grid;
   gap:18px;
@@ -191,10 +191,13 @@
 .info-row{
   display:grid;
   grid-template-columns:44px 1fr;
-  column-gap:14px;
+  column-gap:18px;
   align-items:start;
   min-height:82px;
-  padding:14px 16px 14px 10px;
+
+  /* TOP RIGHT BOTTOM LEFT */
+  padding:14px 16px 14px 18px;
+
   border-left:3px solid var(--red);
   background:rgba(5,13,22,.58);
   position:relative;
