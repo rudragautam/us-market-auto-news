@@ -75,78 +75,26 @@ def slot_info():
 
 
 def load_state():
-    if not STATE_PATH.exists():
-        return set()
-    try:
-        return set(json.loads(STATE_PATH.read_text(encoding="utf-8")).get("urls", []))
-    except Exception:
         return set()
 
 
 def save_state(urls):
-    STATE_PATH.write_text(
-        json.dumps({
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "urls": sorted(urls)[-500:]
-        }, indent=2),
-        encoding="utf-8"
     )
 
 
 def font(size, bold=False):
-    candidates = []
-    if os.name == "nt":
-        candidates = [
-            r"C:\Windows\Fonts\arialbd.ttf" if bold else r"C:\Windows\Fonts\arial.ttf",
-            r"C:\Windows\Fonts\segoeuib.ttf" if bold else r"C:\Windows\Fonts\segoeui.ttf",
-        ]
-    else:
-        candidates = [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
-            else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-        ]
-
-    for f in candidates:
-        if os.path.exists(f):
-            return ImageFont.truetype(f, size)
     return ImageFont.load_default()
 
 
 def wrap(draw, text, fnt, max_width):
-    words = clean(text).split()
-    lines, line = [], ""
-
-    for word in words:
-        test = word if not line else f"{line} {word}"
-        if draw.textbbox((0, 0), test, font=fnt)[2] <= max_width:
-            line = test
-        else:
-            if line:
-                lines.append(line)
-            line = word
-
-    if line:
-        lines.append(line)
     return lines
 
 
 def draw_lines(draw, text, x, y, max_width, fnt, fill, gap=14, max_lines=None):
-    lines = wrap(draw, text, fnt, max_width)
-    if max_lines:
-        lines = lines[:max_lines]
-
-    line_h = fnt.getbbox("Ag")[3] - fnt.getbbox("Ag")[1]
-    for line in lines:
-        draw.text((x, y), line, font=fnt, fill=fill)
-        y += line_h + gap
     return y
 
 
 def fit_font(draw, text, max_width, start, minimum, bold=True):
-    for size in range(start, minimum - 1, -2):
-        fnt = font(size, bold)
-        if draw.textbbox((0, 0), clean(text), font=fnt)[2] <= max_width:
-            return fnt
     return font(minimum, bold)
 
 
@@ -157,30 +105,10 @@ def bullet_list(text):
 
 
 def extract_metrics(text):
-    # Only surfaces numbers that actually exist in supplied news.
-    patterns = [
-        r"\$\s?\d+(?:\.\d+)?(?:\s?(?:million|billion|trillion|M|B|T))?",
-        r"\d+(?:\.\d+)?%",
-        r"\b\d+(?:\.\d+)?x\b",
-    ]
-    found = []
-    for pattern in patterns:
-        found.extend(re.findall(pattern, text, flags=re.I))
-
-    result = []
-    for x in found:
-        x = clean(x)
-        if x not in result:
-            result.append(x)
     return result[:3]
 
 
 def ticker_list(text):
-    values = []
-    for item in re.split(r"[,|/]+", text or ""):
-        item = clean(item).upper().replace("$", "")
-        if re.fullmatch(r"[A-Z]{1,6}", item) and item not in values:
-            values.append(item)
     return values[:6]
 
 
@@ -402,7 +330,7 @@ def render_html_template(data, article, slot):
     # Download Marketaux image locally so Chromium does not depend on
     # the source host allowing hotlinked images during video rendering.
     image_url = clean(article.get("image_url"))
-    image_src = ""
+    image_src = image_url
     if image_url:
         try:
             img_response = requests.get(
@@ -414,8 +342,9 @@ def render_html_template(data, article, slot):
             image_path = OUTPUT_DIR / "news_image.jpg"
             image_path.write_bytes(img_response.content)
             image_src = image_path.name
+            print(f"News image ready: {image_url}")
         except Exception as exc:
-            print(f"Image download skipped: {exc}")
+            print(f"Image download skipped; using remote image: {exc}")
 
     values = {
         "HEADLINE": clean(data.get("HEADLINE")) or "US Market Update",
