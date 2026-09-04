@@ -29,7 +29,7 @@ STATE_PATH = Path("data/posted_news.json")
 
 WIDTH, HEIGHT = 1080, 1920
 SLIDE_SECONDS = 5
-FPS = 30
+FPS = 60
 ET = ZoneInfo("America/New_York")
 
 TARGET_SLOTS = {
