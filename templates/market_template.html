@@ -120,6 +120,48 @@
     font-size:19px;line-height:1.38;color:#f2f4f6;
   }
 
+  /* News image — compact visual, does not change the existing layout */
+  .news-image{
+    position:absolute;
+    right:0;
+    bottom:58px;
+    width:205px;
+    height:132px;
+    border:1px solid rgba(227,27,35,.75);
+    border-radius:8px;
+    overflow:hidden;
+    background:
+      linear-gradient(145deg,rgba(8,18,29,.96),rgba(2,7,13,.98));
+    box-shadow:0 0 24px rgba(227,27,35,.12);
+    z-index:2;
+  }
+  .news-image img{
+    width:100%;
+    height:100%;
+    display:block;
+    object-fit:cover;
+    opacity:.88;
+  }
+  .news-image:after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(180deg,transparent 45%,rgba(2,7,13,.72) 100%);
+    pointer-events:none;
+  }
+  .news-image-label{
+    position:absolute;
+    left:10px;
+    bottom:8px;
+    z-index:2;
+    font-size:9px;
+    font-weight:900;
+    letter-spacing:1.3px;
+    color:#fff;
+    text-transform:uppercase;
+    text-shadow:0 1px 5px #000;
+  }
+
   .hero-chart{
     position:absolute;left:-10%;right:-10%;bottom:-5px;height:245px;opacity:.7;
     background:
@@ -316,6 +358,14 @@ body.render-mode .scene-controls{display:none !important}
       <div class="line animate d3"></div>
       <div class="label animate d3">HOOK</div>
       <div class="body animate d4">{{HOOK}}</div>
+
+      <!-- Marketaux image slot: main.py can replace IMAGE_URL with the article image -->
+      <div class="news-image animate d4" aria-label="News image">
+        <img src="{{IMAGE_URL}}" alt="Market news image"
+             onerror="this.style.display='none'">
+        <div class="news-image-label">MARKET NEWS</div>
+      </div>
+
       <div class="hero-chart"></div>
     </div>
     <div class="footer"><span class="swipe">1/7&nbsp;&nbsp; SWIPE →</span><span class="disclaimer">NOT FINANCIAL ADVICE</span></div>
