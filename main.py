@@ -29,7 +29,7 @@ STATE_PATH = Path("data/posted_news.json")
 
 WIDTH, HEIGHT = 1080, 1920
 SLIDE_SECONDS = 5
-FPS = 60
+FPS = 30
 ET = ZoneInfo("America/New_York")
 
 TARGET_SLOTS = {
@@ -399,6 +399,24 @@ def render_html_template(data, article, slot):
         "NEUTRAL": "The selected story does not clearly favor either direction.",
     }.get(sentiment, "The selected story does not clearly favor either direction.")
 
+    # Download Marketaux image locally so Chromium does not depend on
+    # the source host allowing hotlinked images during video rendering.
+    image_url = clean(article.get("image_url"))
+    image_src = ""
+    if image_url:
+        try:
+            img_response = requests.get(
+                image_url,
+                timeout=20,
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            img_response.raise_for_status()
+            image_path = OUTPUT_DIR / "news_image.jpg"
+            image_path.write_bytes(img_response.content)
+            image_src = image_path.name
+        except Exception as exc:
+            print(f"Image download skipped: {exc}")
+
     values = {
         "HEADLINE": clean(data.get("HEADLINE")) or "US Market Update",
         "HOOK": clean(data.get("HOOK")),
@@ -422,6 +440,7 @@ def render_html_template(data, article, slot):
         "HASHTAGS": clean(data.get("HASHTAGS")),
         "SOURCE_URL": source_url,
         "SLOT": slot,
+        "IMAGE_URL": image_src,
     }
 
     # The HTML renderer performs the final text replacement in the browser.
