@@ -48,7 +48,7 @@ STATE_PATH.parent.mkdir(exist_ok=True, parents=True)
 # ============================================================
 
 def clean(value):
-    return re.sub(r"\s+", " ", str(value or "")).strip()
+    return re.sub(r"\\s+", " ", str(value or "")).strip()
 
 
 def slot_info():
@@ -61,7 +61,12 @@ def slot_info():
     nearest_seconds = 10**9
 
     for (hour, minute), name in TARGET_SLOTS.items():
-        target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        target = now.replace(
+            hour=hour,
+            minute=minute,
+            second=0,
+            microsecond=0,
+        )
         seconds = abs((now - target).total_seconds())
         if seconds < nearest_seconds:
             nearest_seconds = seconds
@@ -75,41 +80,42 @@ def slot_info():
 
 
 def load_state():
+    if not STATE_PATH.exists():
         return set()
+
+    try:
+        data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return set(data)
+        if isinstance(data, dict):
+            return set(data.get("posted_urls", []))
+    except Exception as exc:
+        print(f"State load skipped: {exc}")
+
+    return set()
 
 
 def save_state(urls):
+    STATE_PATH.write_text(
+        json.dumps(sorted(urls), indent=2, ensure_ascii=False),
+        encoding="utf-8",
     )
 
 
-def font(size, bold=False):
-    return ImageFont.load_default()
-
-
-def wrap(draw, text, fnt, max_width):
-    return lines
-
-
-def draw_lines(draw, text, x, y, max_width, fnt, fill, gap=14, max_lines=None):
-    return y
-
-
-def fit_font(draw, text, max_width, start, minimum, bold=True):
-    return font(minimum, bold)
-
-
 def bullet_list(text):
-    parts = re.split(r"[\n•]+", str(text or ""))
-    parts = [clean(x).lstrip("-").strip() for x in parts if clean(x)]
-    return parts[:4]
-
-
-def extract_metrics(text):
-    return result[:3]
+    parts = re.split(r"[\\n•]+", str(text or ""))
+    parts = [clean(x).lstrip("-*").strip() for x in parts if clean(x)]
+    return parts[:3]
 
 
 def ticker_list(text):
-    return values[:6]
+    parts = re.split(r"[,\\n•]+", str(text or ""))
+    cleaned = []
+    for value in parts:
+        value = clean(value).lstrip("$").upper()
+        if value and value not in cleaned and value != "N/A":
+            cleaned.append(value)
+    return cleaned[:6]
 
 
 # ============================================================
