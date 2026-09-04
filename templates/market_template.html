@@ -100,7 +100,7 @@
     text-transform:uppercase;margin:0;line-height:.9;
   }
   h1{font-size:68px;letter-spacing:-1.5px;line-height:.88;text-shadow:0 0 24px rgba(255,255,255,.08)}
-  h2{font-size:50px;letter-spacing:-.4px;line-height:.92;text-shadow:0 0 20px rgba(255,255,255,.06)}
+  h2{font-size:50px;letter-spacing:-.4px;line-height:1.02;text-shadow:0 0 20px rgba(255,255,255,.06)}
 
   .red{color:var(--red)}
 
@@ -152,13 +152,39 @@
     margin-top:6px;text-shadow:0 0 22px rgba(227,27,35,.3);
   }
 
+  /* Scene 4 only — balanced market sentiment card */
+  .scene[data-scene="4"] .sentiment{
+    margin-top:18px;
+    min-height:132px;
+    padding:16px 18px 18px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }
+  .scene[data-scene="4"] .sentiment .label{
+    margin:0 0 8px;
+    font-size:13px;
+    letter-spacing:1.8px;
+  }
+  .scene[data-scene="4"] .sentiment strong{
+    font-size:46px;
+    line-height:1;
+    margin:0 0 8px;
+    letter-spacing:.4px;
+  }
+  .scene[data-scene="4"] .sentiment .body{
+    font-size:16px;
+    line-height:1.35;
+    color:#e6e9ed;
+  }
+
   .quote{
     font-family:"Arial Narrow",Impact,Arial,sans-serif;font-size:90px;color:var(--red);line-height:.35;
   }
 
-  .info-list{margin-top:22px;display:grid;gap:16px}
+  .info-list{margin-top:26px;display:grid;gap:18px}
   .info-row{
-    display:grid;grid-template-columns:42px 1fr;gap:15px;align-items:start;
+    display:grid;grid-template-columns:42px 1fr;gap:15px;align-items:center;
     padding:15px 14px 16px 0;border-left:3px solid rgba(227,27,35,.65);
     background:linear-gradient(90deg,rgba(227,27,35,.09),rgba(5,13,22,.18),transparent);
   }
@@ -170,6 +196,11 @@
   .info-row b{display:block;font-size:16px;color:#ff4148;letter-spacing:1.3px;margin-bottom:5px;text-shadow:0 0 12px rgba(227,27,35,.25)}
   .info-row span{font-size:21px;line-height:1.28;color:#f0f2f4}
 
+  .scene[data-scene="2"] .info-list{margin-top:30px}
+  .scene[data-scene="2"] .info-row{min-height:112px;}
+  .scene[data-scene="3"] .info-row{min-height:108px;}
+  .scene[data-scene="4"] h2{margin-bottom:28px;}
+  .scene[data-scene="4"] .cards{margin-top:0;}
   .scene6-list .info-row{min-height:104px;}
   .takeaway-box{
     margin-top:22px;padding:17px 18px 19px;border:1px solid rgba(227,27,35,.6);
