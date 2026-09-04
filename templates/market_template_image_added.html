@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1080, initial-scale=1.0">
+<title>The Third Eye — US Market News</title>
+<style>
+  
+
+  :root{
+    --red:#e31b23;
+    --red2:#a9080f;
+    --white:#f7f7f7;
+    --muted:#b9c0ca;
+    --bg:#03070d;
+    --panel:#07111c;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#000;font-family:Arial,Helvetica,sans-serif}
+  body{width:1080px;height:1920px;overflow:hidden;padding:0;margin:0;display:block}
+
+  .video{
+    width:540px;
+    height:960px;
+    transform:scale(2);
+    transform-origin:top left;
+    position:relative;
+    overflow:hidden;
+    color:var(--white);
+    background:
+      radial-gradient(circle at 78% 18%, rgba(227,27,35,.22), transparent 25%),
+      radial-gradient(circle at 20% 75%, rgba(20,76,120,.25), transparent 30%),
+      linear-gradient(145deg,#02060b,#07131f 55%,#02050a);
+    box-shadow:none;
+  }
+
+  /* subtle newsroom texture */
+  .video:before{
+    content:"";
+    position:absolute;inset:0;pointer-events:none;opacity:.18;
+    background:
+      linear-gradient(115deg,transparent 0 43%,rgba(255,255,255,.06) 44%,transparent 45%),
+      repeating-linear-gradient(0deg,transparent 0 5px,rgba(255,255,255,.018) 6px);
+  }
+
+  .grid{
+    position:absolute;inset:0;opacity:.12;
+    background-image:
+      linear-gradient(rgba(255,255,255,.18) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.18) 1px,transparent 1px);
+    background-size:54px 54px;
+    transform:perspective(700px) rotateX(55deg) scale(1.7);
+    transform-origin:bottom;
+  }
+
+  .topbar{
+    position:absolute;left:30px;right:30px;top:25px;
+    display:flex;justify-content:space-between;align-items:center;
+    z-index:5;
+  }
+
+  .brand{
+    display:flex;align-items:center;gap:10px;
+    font-weight:800;letter-spacing:.5px;font-size:13px;
+  }
+  .eye{
+    width:31px;height:18px;border:2px solid var(--red);border-radius:60% 40%;
+    position:relative;transform:rotate(-8deg);
+  }
+  .eye:after{
+    content:"";position:absolute;width:7px;height:7px;border-radius:50%;
+    background:var(--red);left:10px;top:4px;
+  }
+  .brand small{display:block;font-size:7px;color:#87919d;letter-spacing:1.4px;margin-top:2px}
+
+  .scene-no{
+    font-size:11px;font-weight:800;color:#dce2e8;
+    border-left:2px solid var(--red);padding-left:9px;
+  }
+
+  .badge{
+    display:inline-flex;align-items:center;gap:8px;
+    background:linear-gradient(90deg,var(--red2),var(--red));
+    padding:8px 13px;border-radius:3px;
+    font-size:12px;font-weight:800;letter-spacing:.5px;
+    box-shadow:0 5px 25px rgba(227,27,35,.2);
+  }
+
+  .content{position:absolute;inset:84px 24px 42px;z-index:3}
+
+  .kicker{
+    color:#ff4a50;font-size:14px;font-weight:900;
+    letter-spacing:2px;margin-bottom:18px;
+    text-shadow:0 0 18px rgba(227,27,35,.35);
+  }
+
+  h1,h2{
+    font-family:"Arial Narrow",Impact,Arial,sans-serif;
+    text-transform:uppercase;margin:0;line-height:.9;
+  }
+  h1{font-size:68px;letter-spacing:-1.5px;line-height:.88;text-shadow:0 0 24px rgba(255,255,255,.08)}
+  h2{font-size:50px;letter-spacing:-.4px;line-height:1.02;text-shadow:0 0 20px rgba(255,255,255,.06)}
+
+  .red{color:var(--red)}
+
+  .line{
+    width:100%;height:3px;background:linear-gradient(90deg,var(--red),rgba(227,27,35,.35),transparent);
+    margin:22px 0;
+    box-shadow:0 0 14px rgba(227,27,35,.32);
+  }
+
+  .label{
+    color:#ff3b43;font-weight:900;font-size:14px;
+    letter-spacing:1.5px;text-transform:uppercase;margin-bottom:7px;
+    text-shadow:0 0 12px rgba(227,27,35,.28);
+  }
+
+  .body{
+    font-size:19px;line-height:1.38;color:#f2f4f6;
+  }
+
+  /* News image — compact visual, does not change the existing layout */
+  .news-image{
+    position:absolute;
+    right:0;
+    bottom:58px;
+    width:205px;
+    height:132px;
+    border:1px solid rgba(227,27,35,.75);
+    border-radius:8px;
+    overflow:hidden;
+    background:
+      linear-gradient(145deg,rgba(8,18,29,.96),rgba(2,7,13,.98));
+    box-shadow:0 0 24px rgba(227,27,35,.12);
+    z-index:2;
+  }
+  .news-image img{
+    width:100%;
+    height:100%;
+    display:block;
+    object-fit:cover;
+    opacity:.88;
+  }
+  .news-image:after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(180deg,transparent 45%,rgba(2,7,13,.72) 100%);
+    pointer-events:none;
+  }
+  .news-image-label{
+    position:absolute;
+    left:10px;
+    bottom:8px;
+    z-index:2;
+    font-size:9px;
+    font-weight:900;
+    letter-spacing:1.3px;
+    color:#fff;
+    text-transform:uppercase;
+    text-shadow:0 1px 5px #000;
+  }
+
+  .hero-chart{
+    position:absolute;left:-10%;right:-10%;bottom:-5px;height:245px;opacity:.7;
+    background:
+      linear-gradient(170deg,transparent 0 46%,rgba(227,27,35,.05) 47%),
+      repeating-linear-gradient(90deg,transparent 0 38px,rgba(227,27,35,.09) 39px 40px);
+    clip-path:polygon(0 82%,8% 70%,15% 78%,22% 54%,31% 64%,39% 43%,46% 61%,54% 30%,62% 48%,70% 22%,78% 40%,87% 16%,100% 30%,100% 100%,0 100%);
+    border-bottom:3px solid rgba(227,27,35,.6);
+    animation:chart 5s ease-in-out infinite alternate;
+  }
+
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}
+  .card{
+    background:linear-gradient(145deg,rgba(9,20,32,.96),rgba(3,8,15,.9));border:1px solid rgba(255,255,255,.22);
+    border-radius:9px;padding:18px;position:relative;overflow:hidden;
+    box-shadow:0 0 22px rgba(227,27,35,.08), inset 0 0 24px rgba(255,255,255,.025);
+  }
+  .card:before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--red);
+  }
+  .ticker{font-size:27px;font-weight:900;letter-spacing:.5px}
+  .move{font-size:16px;color:#ff545a;margin-top:6px;font-weight:900;letter-spacing:.7px}
+
+  .sentiment{
+    margin-top:20px;border:1px solid rgba(227,27,35,.65);
+    padding:20px;border-radius:9px;background:linear-gradient(145deg,rgba(80,0,5,.3),rgba(10,8,14,.35));
+    box-shadow:0 0 28px rgba(227,27,35,.12), inset 0 0 25px rgba(227,27,35,.05);
+  }
+  .sentiment strong{
+    display:block;font-family:"Arial Narrow",Impact,Arial,sans-serif;font-size:54px;line-height:.9;color:var(--red);
+    margin-top:6px;text-shadow:0 0 22px rgba(227,27,35,.3);
+  }
+
+  /* Scene 4 only — balanced market sentiment card */
+  .scene[data-scene="4"] .sentiment{
+    margin-top:18px;
+    min-height:132px;
+    padding:16px 18px 18px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }
+  .scene[data-scene="4"] .sentiment .label{
+    margin:0 0 8px;
+    font-size:13px;
+    letter-spacing:1.8px;
+  }
+  .scene[data-scene="4"] .sentiment strong{
+    font-size:46px;
+    line-height:1;
+    margin:0 0 8px;
+    letter-spacing:.4px;
+  }
+  .scene[data-scene="4"] .sentiment .body{
+    font-size:16px;
+    line-height:1.35;
+    color:#e6e9ed;
+  }
+
+  .quote{
+    font-family:"Arial Narrow",Impact,Arial,sans-serif;font-size:90px;color:var(--red);line-height:.35;
+  }
+
+.info-list{
+  margin-top:22px;
+  display:grid;
+  gap:18px;
+}
+
+.info-row{
+  display:grid;
+  grid-template-columns:44px 1fr;
+  column-gap:18px;
+  align-items:start;
+  min-height:82px;
+
+  /* TOP RIGHT BOTTOM LEFT */
+  padding:14px 16px 14px 18px;
+
+  border-left:3px solid var(--red);
+  background:rgba(5,13,22,.58);
+  position:relative;
+}
+
+.icon{
+  width:34px;
+  height:34px;
+  border:2px solid var(--red);
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:14px;
+  font-weight:900;
+  margin-top:2px;
+  box-shadow:0 0 12px rgba(227,27,35,.35);
+}
+
+.info-row > div:last-child{
+  min-width:0;
+  padding-top:1px;
+}
+
+.info-row b{
+  display:block;
+  font-size:13px;
+  line-height:1.2;
+  color:var(--red);
+  letter-spacing:1.2px;
+  margin:0 0 7px;
+}
+
+.info-row span{
+  display:block;
+  font-size:16px;
+  line-height:1.35;
+  color:#e8ebee;
+}
+  .info-row span{font-size:21px;line-height:1.28;color:#f0f2f4}
+
+  .scene[data-scene="2"] .info-list{margin-top:30px}
+  .scene[data-scene="2"] .info-row{min-height:112px;}
+  .scene[data-scene="3"] .info-row{min-height:108px;}
+  .scene[data-scene="4"] h2{margin-bottom:28px;}
+  .scene[data-scene="4"] .cards{margin-top:0;}
+  .scene6-list .info-row{min-height:104px;}
+  .takeaway-box{
+    margin-top:22px;padding:17px 18px 19px;border:1px solid rgba(227,27,35,.6);
+    border-left:4px solid var(--red);border-radius:7px;
+    background:linear-gradient(100deg,rgba(227,27,35,.13),rgba(5,13,22,.62));
+    box-shadow:0 0 28px rgba(227,27,35,.14), inset 0 0 22px rgba(227,27,35,.035);
+  }
+  .takeaway-box span{display:block;font-size:12px;font-weight:900;letter-spacing:1.5px;color:#ff4148;margin-bottom:7px;text-shadow:0 0 12px rgba(227,27,35,.25)}
+  .takeaway-box strong{display:block;font-size:20px;line-height:1.28;color:#f4f6f8}
+
+  .footer{
+    position:absolute;bottom:17px;left:24px;right:24px;
+    display:flex;justify-content:space-between;align-items:center;
+    font-size:9px;color:#9aa3ad;letter-spacing:.7px;z-index:5;
+  }
+
+  .swipe{color:#fff;font-weight:800}
+  .disclaimer{color:#777f89}
+
+  /* scenes */
+  .scene{position:absolute;inset:0;opacity:0;visibility:hidden;transform:translateX(28px)}
+  .scene.active{opacity:1;visibility:visible;transform:none;animation:sceneIn .65s ease both}
+
+  .scene.active .animate{animation:rise .7s ease both}
+  .scene.active .d1{animation-delay:.12s}
+  .scene.active .d2{animation-delay:.24s}
+  .scene.active .d3{animation-delay:.36s}
+  .scene.active .d4{animation-delay:.48s}
+
+  .source{
+    margin-top:20px;padding-top:13px;border-top:1px solid rgba(255,255,255,.22);
+    font-size:14px;line-height:1.35;color:#c5cbd2;
+  }
+  .source b{color:var(--red)}
+
+  .scene-controls{
+    position:fixed;bottom:15px;left:50%;transform:translateX(-50%);
+    display:flex;gap:8px;align-items:center;z-index:20;
+  }
+  .scene-controls button{
+    border:1px solid #555;background:#111;color:#fff;border-radius:5px;
+    padding:7px 10px;cursor:pointer;
+  }
+  .scene-controls button.active{background:var(--red);border-color:var(--red)}
+
+  @keyframes sceneIn{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
+  @keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+  @keyframes chart{from{transform:translateX(-12px)}to{transform:translateX(12px)}}
+
+  /* The design is authored on a 540x960 logical canvas and rendered at exactly 1080x1920. */
+body.render-mode .scene-controls{display:none !important}
+</style>
+</head>
+<body>
+
+<div class="video" id="video">
+  <div class="grid"></div>
+
+  <!-- SCENE 1 -->
+  <section class="scene active" data-scene="1">
+    <div class="topbar">
+      <div class="brand"><div class="eye"></div><div>THE THIRD EYE<small>UNCOVER. ANALYZE. INFORM.</small></div></div>
+      <div class="scene-no">01 / 07</div>
+    </div>
+    <div class="content">
+      <div class="badge animate">{{SLOT}} · US MARKET NEWS</div>
+      <div style="height:20px"></div>
+      <div class="kicker animate d1">BREAKING MARKET UPDATE</div>
+      <h1 class="animate d2">{{HEADLINE}}</h1>
+      <div class="line animate d3"></div>
+      <div class="label animate d3">HOOK</div>
+      <div class="body animate d4">{{HOOK}}</div>
+
+      <!-- Marketaux image slot: main.py can replace IMAGE_URL with the article image -->
+      <div class="news-image animate d4" aria-label="News image">
+        <img src="{{IMAGE_URL}}" alt="Market news image"
+             onerror="this.style.display='none'">
+        <div class="news-image-label">MARKET NEWS</div>
+      </div>
+
+      <div class="hero-chart"></div>
+    </div>
+    <div class="footer"><span class="swipe">1/7&nbsp;&nbsp; SWIPE →</span><span class="disclaimer">NOT FINANCIAL ADVICE</span></div>
+  </section>
+
+  <!-- SCENE 2 -->
+  <section class="scene" data-scene="2">
+    <div class="topbar">
+      <div class="brand"><div class="eye"></div><div>THE THIRD EYE<small>US MARKET NEWS</small></div></div>
+      <div class="scene-no">02 / 07</div>
+    </div>
+    <div class="content">
+      <div class="badge animate">WHAT HAPPENED</div>
+      <div style="height:28px"></div>
+      <h2 class="animate d1">The latest<br><span class="red">development</span></h2>
+      <div class="info-list">
+        <div class="info-row animate d2"><div class="icon">1</div><div><b>POLICY</b><span>{{WHAT_1}}</span></div></div>
+        <div class="info-row animate d3"><div class="icon">2</div><div><b>COMPANIES</b><span>{{WHAT_2}}</span></div></div>
+        <div class="info-row animate d4"><div class="icon">3</div><div><b>MARKET</b><span>{{WHAT_3}}</span></div></div>
+      </div>
+      <div class="hero-chart"></div>
+    </div>
+    <div class="footer"><span class="swipe">2/7&nbsp;&nbsp; SWIPE →</span><span class="disclaimer">THE THIRD EYE</span></div>
+  </section>
+
+  <!-- SCENE 3 -->
+  <section class="scene" data-scene="3">
+    <div class="topbar">
+      <div class="brand"><div class="eye"></div><div>THE THIRD EYE<small>US MARKET NEWS</small></div></div>
+      <div class="scene-no">03 / 07</div>
+    </div>
+    <div class="content">
+      <div class="badge animate">WHY IT MATTERS</div>
+      <div style="height:25px"></div>
+      <h2 class="animate d1">What investors<br>are <span class="red">watching</span></h2>
+      <div class="line"></div>
+      <div class="info-list">
+        <div class="info-row animate d2"><div class="icon">↗</div><div><b>REVENUE</b><span>{{WHY_1}}</span></div></div>
+        <div class="info-row animate d3"><div class="icon">!</div><div><b>GROWTH</b><span>{{WHY_2}}</span></div></div>
+        <div class="info-row animate d4"><div class="icon">◎</div><div><b>COMPETITION</b><span>{{WHY_3}}</span></div></div>
+      </div>
+      <div class="source"><b>KEY SIGNAL:</b> {{KEY_SIGNAL}}</div>
+    </div>
+    <div class="footer"><span class="swipe">3/7&nbsp;&nbsp; SWIPE →</span><span class="disclaimer">THE THIRD EYE</span></div>
+  </section>
+
+  <!-- SCENE 4 -->
+  <section class="scene" data-scene="4">
+    <div class="topbar">
+      <div class="brand"><div class="eye"></div><div>THE THIRD EYE<small>US MARKET NEWS</small></div></div>
+      <div class="scene-no">04 / 07</div>
+    </div>
+    <div class="content">
+      <div class="badge animate">STOCKS TO WATCH</div>
+      <div style="height:25px"></div>
+      <h2 class="animate d1">Tickers in<br><span class="red">focus</span></h2>
+      <div class="cards">
+        <div class="card animate d2"><div class="ticker">{{TICKER_1}}</div><div class="move">{{MOVE_1}}</div></div>
+        <div class="card animate d2"><div class="ticker">{{TICKER_2}}</div><div class="move">{{MOVE_2}}</div></div>
+        <div class="card animate d3"><div class="ticker">{{TICKER_3}}</div><div class="move">{{MOVE_3}}</div></div>
+        <div class="card animate d3"><div class="ticker">{{TICKER_4}}</div><div class="move">{{MOVE_4}}</div></div>
+      </div>
+      <div class="sentiment animate d4">
+        <div class="label">MARKET SENTIMENT</div>
+        <strong>{{SENTIMENT}}</strong>
+        <div class="body">{{SENTIMENT_TEXT}}</div>
+      </div>
+      <div class="hero-chart"></div>
+    </div>
+    <div class="footer"><span class="swipe">4/7&nbsp;&nbsp; SWIPE →</span><span class="disclaimer">THE THIRD EYE</span></div>
+  </section>
+
+  <!-- SCENE 5 -->
+  <section class="scene" data-scene="5">
+    <div class="topbar">
+      <div class="brand"><div class="eye"></div><div>THE THIRD EYE<small>US MARKET NEWS</small></div></div>
+      <div class="scene-no">05 / 07</div>
+    </div>
+    <div class="content">
+      <div class="badge animate">MARKET REACTION</div>
+      <div style="height:28px"></div>
+      <div class="quote animate">“</div>
+      <h2 class="animate d1">How the market<br><span class="red">is reacting</span></h2>
+      <div class="line"></div>
+      <div class="body animate d2">
+        {{CAPTION}}
+      </div>
+      <div class="sentiment animate d3">
+        <div class="label">CURRENT SIGNAL</div>
+        <strong>{{SENTIMENT}}</strong>
+      </div>
+      <div class="source animate d4"><b>READ:</b> {{KEY_SIGNAL}}</div>
+    </div>
+    <div class="footer"><span class="swipe">5/7&nbsp;&nbsp; SWIPE →</span><span class="disclaimer">NEWS SUMMARY • NOT FINANCIAL ADVICE</span></div>
+  </section>
+
+  <!-- SCENE 6 -->
+  <section class="scene" data-scene="6">
+    <div class="topbar">
+      <div class="brand"><div class="eye"></div><div>THE THIRD EYE<small>US MARKET NEWS</small></div></div>
+      <div class="scene-no">06 / 07</div>
+    </div>
+    <div class="content">
+      <div class="badge animate">TAKEAWAY FOR INVESTORS</div>
+      <div style="height:28px"></div>
+      <h2 class="animate d1">What to<br><span class="red">watch next</span></h2>
+      <div class="info-list scene6-list">
+        <div class="info-row animate d2"><div class="icon">1</div><div><b>KEY SIGNAL</b><span>{{KEY_SIGNAL}}</span></div></div>
+        <div class="info-row animate d3"><div class="icon">2</div><div><b>MARKET MOOD</b><span>{{SENTIMENT_TEXT}}</span></div></div>
+        <div class="info-row animate d4"><div class="icon">3</div><div><b>TAKEAWAY</b><span>{{TAKEAWAY}}</span></div></div>
+      </div>
+      <div class="takeaway-box animate d4"><span>INVESTOR TAKEAWAY</span><strong>{{TAKEAWAY}}</strong></div>
+    </div>
+    <div class="footer"><span class="swipe">6/7&nbsp;&nbsp; SWIPE →</span><span class="disclaimer">THE THIRD EYE</span></div>
+  </section>
+
+  <!-- SCENE 7 -->
+  <section class="scene" data-scene="7">
+    <div class="topbar">
+      <div class="brand"><div class="eye"></div><div>THE THIRD EYE<small>US MARKET NEWS</small></div></div>
+      <div class="scene-no">07 / 07</div>
+    </div>
+    <div class="content">
+      <div class="badge animate">MORE INFO · {{SLOT}}</div>
+      <div style="height:30px"></div>
+      <h2 class="animate d1">Stay informed.<br><span class="red">Stay ahead.</span></h2>
+      <div class="line"></div>
+      <div class="info-list">
+        <div class="info-row animate d2"><div class="icon">◎</div><div><b>SOURCE</b><span>{{SOURCE}}</span></div></div>
+        <div class="info-row animate d3"><div class="icon">#</div><div><b>TOPICS</b><span>{{HASHTAGS}}</span></div></div>
+      </div>
+      <div style="height:50px"></div>
+      <div class="brand animate d4" style="font-size:18px"><div class="eye" style="width:42px;height:24px"></div><div>THE THIRD EYE<small>UNCOVER. ANALYZE. INFORM.</small></div></div>
+      <div class="source animate d4"><b>DISCLAIMER:</b> This content is for informational purposes only and is not financial advice.<br><span>{{SOURCE_URL}}</span></div>
+    </div>
+    <div class="footer"><span class="swipe">7/7&nbsp;&nbsp; END</span><span class="disclaimer">THE THIRD EYE</span></div>
+  </section>
+</div>
+
+<div class="scene-controls" id="controls"></div>
+
+<script>
+  window.__THE_THIRD_EYE_READY__ = false;
+  window.addEventListener("load", () => { window.__THE_THIRD_EYE_READY__ = true; });
+</script>
+
+<script>
+  const scenes=[...document.querySelectorAll('.scene')];
+  const controls=document.getElementById('controls');
+  let current=0;
+
+  scenes.forEach((_,i)=>{
+    const b=document.createElement('button');
+    b.textContent=i+1;
+    b.onclick=()=>showScene(i);
+    controls.appendChild(b);
+  });
+
+  function showScene(index){
+    current=(index+scenes.length)%scenes.length;
+    scenes.forEach((s,i)=>s.classList.toggle('active',i===current));
+    [...controls.children].forEach((b,i)=>b.classList.toggle('active',i===current));
+  }
+
+  showScene(0);
+
+  // Demo autoplay: each scene lasts 5 seconds.
+  setInterval(()=>showScene(current+1),5000);
+</script>
+</body>
+</html>
