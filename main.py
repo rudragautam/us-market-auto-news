@@ -48,7 +48,7 @@ STATE_PATH.parent.mkdir(exist_ok=True, parents=True)
 # ============================================================
 
 def clean(value):
-    return re.sub(r"\\s+", " ", str(value or "")).strip()
+    return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
 def slot_info():
@@ -103,13 +103,13 @@ def save_state(urls):
 
 
 def bullet_list(text):
-    parts = re.split(r"[\\n•]+", str(text or ""))
+    parts = re.split(r"[\n•]+", str(text or ""))
     parts = [clean(x).lstrip("-*").strip() for x in parts if clean(x)]
     return parts[:3]
 
 
 def ticker_list(text):
-    parts = re.split(r"[,\\n•]+", str(text or ""))
+    parts = re.split(r"[,\n•]+", str(text or ""))
     cleaned = []
     for value in parts:
         value = clean(value).lstrip("$").upper()
@@ -193,8 +193,8 @@ POST SLOT: {slot}
 
 Choose ONE strongest story from the supplied Marketaux news.
 
-This is NOT a long article. It is a fast visual news Short.
-Write very short, punchy, factual copy.
+This is a premium editorial Short, not a coding/demo screen.
+Write concise copy that looks natural when printed on a vertical video.
 
 STRICT RULES:
 - Use only facts present in the supplied news.
@@ -202,9 +202,12 @@ STRICT RULES:
 - Do not give financial advice.
 - Prefer a company/equity catalyst over generic filler.
 - Tickers only from the selected story.
-- If no number is present, do not invent one.
+- If no number is present, say "No material figure reported" instead of N/A.
+- If no ticker is present, return NONE.
 - Avoid crypto-only stories unless the story clearly affects US equities.
-- Each bullet must be short enough for a mobile screen.
+- Every line must be useful to a viewer; never output filler or coding language.
+- The hook is the opening reason to keep watching; do NOT write the word "HOOK" inside the sentence.
+- Sentiment must be BULLISH, BEARISH, MIXED, or NEUTRAL.
 
 Return EXACTLY these fields:
 
@@ -212,10 +215,10 @@ SELECTED_NEWS_INDEX:
 <number>
 
 HEADLINE:
-<6-12 word factual headline>
+<6-12 word factual headline, specific to the selected company/story>
 
 HOOK:
-<8-18 word attention-grabbing sentence>
+<one sharp 10-18 word opening sentence explaining why this matters now>
 
 WHAT_HAPPENED:
 <3 short bullet lines, each max 12 words>
@@ -224,19 +227,19 @@ WHY_IT_MATTERS:
 <3 short bullet lines, each max 12 words>
 
 TICKERS:
-<comma-separated tickers, or N/A>
+<comma-separated tickers, or NONE>
 
 KEY_SIGNAL:
-<one short factual phrase using a supplied number if useful, otherwise N/A>
+<one short factual investor-relevant signal; if none exists, write "No material figure reported">
 
 SENTIMENT:
 <BULLISH / BEARISH / MIXED / NEUTRAL>
 
 CAPTION:
-<one short sentence>
+<one clean sentence suitable for the post caption>
 
 HASHTAGS:
-<8-12 hashtags>
+<8-12 relevant hashtags>
 
 SOURCE:
 <source name>
@@ -321,9 +324,11 @@ def render_html_template(data, article, slot):
     why = bullet_list(data.get("WHY_IT_MATTERS"))
     tickers = ticker_list(data.get("TICKERS"))
     sentiment = clean(data.get("SENTIMENT")).upper() or "NEUTRAL"
-    signal = clean(data.get("KEY_SIGNAL")) or "N/A"
+    signal = clean(data.get("KEY_SIGNAL")) or "No material figure reported"
     source = clean(data.get("SOURCE")) or clean(article.get("source")) or "Marketaux"
     source_url = clean(article.get("url"))
+    company_names = [clean(e.get("name")) for e in article.get("entities", []) if clean(e.get("name"))]
+    entity_tickers = [clean(e.get("symbol")).upper() for e in article.get("entities", []) if clean(e.get("symbol"))]
     caption = clean(data.get("CAPTION")) or clean(data.get("HOOK"))
 
     sentiment_text = {
@@ -345,34 +350,36 @@ def render_html_template(data, article, slot):
                 headers={"User-Agent": "Mozilla/5.0"},
             )
             img_response.raise_for_status()
-            image_path = OUTPUT_DIR / "news_image.jpg"
+            content_type = (img_response.headers.get("content-type") or "").lower()
+            ext = ".png" if "png" in content_type else ".webp" if "webp" in content_type else ".jpg"
+            image_path = OUTPUT_DIR / f"news_image{ext}"
             image_path.write_bytes(img_response.content)
             image_src = image_path.name
             print(f"News image ready: {image_url}")
         except Exception as exc:
-            print(f"Image download skipped; using remote image: {exc}")
+            print(f"Image download failed; browser will try source image: {exc}")
 
     values = {
-        "HEADLINE": clean(data.get("HEADLINE")) or "US Market Update",
-        "HOOK": clean(data.get("HOOK")),
+        "HEADLINE": clean(data.get("HEADLINE")) or clean(article.get("title")) or "US Market Update",
+        "HOOK": clean(data.get("HOOK")) or clean(article.get("description")) or "A new market development is drawing investor attention.",
         "WHAT_1": what[0] if len(what) > 0 else "Key development reported in the selected story.",
         "WHAT_2": what[1] if len(what) > 1 else "Investors are assessing the potential market impact.",
         "WHAT_3": what[2] if len(what) > 2 else "Company and sector sentiment remain in focus.",
         "WHY_1": why[0] if len(why) > 0 else "The development may affect investor expectations.",
         "WHY_2": why[1] if len(why) > 1 else "Markets are watching the next company update.",
         "WHY_3": why[2] if len(why) > 2 else "Further headlines could move the sector.",
-        "TICKER_1": "$" + tickers[0] if len(tickers) > 0 else "N/A",
+        "TICKER_1": "$" + tickers[0] if len(tickers) > 0 else "",
         "TICKER_2": "$" + tickers[1] if len(tickers) > 1 else "—",
         "TICKER_3": "$" + tickers[2] if len(tickers) > 2 else "—",
         "TICKER_4": "$" + tickers[3] if len(tickers) > 3 else "—",
-        "MOVE_1": "WATCH", "MOVE_2": "WATCH", "MOVE_3": "WATCH", "MOVE_4": "WATCH",
+        "MOVE_1": "STORY DRIVER", "MOVE_2": "STORY DRIVER", "MOVE_3": "STORY DRIVER", "MOVE_4": "STORY DRIVER",
         "SENTIMENT": sentiment,
         "SENTIMENT_TEXT": sentiment_text,
-        "CAPTION": caption,
+        "CAPTION": caption or "Key US market development to watch.",
         "KEY_SIGNAL": signal,
-        "TAKEAWAY": signal if signal != "N/A" else clean(data.get("WHY_IT_MATTERS")) or clean(data.get("HOOK")),
+        "TAKEAWAY": signal if signal != "No material figure reported" else clean(data.get("WHY_IT_MATTERS")) or clean(data.get("HOOK")) or "Investors are watching the next confirmed update.",
         "SOURCE": source,
-        "HASHTAGS": clean(data.get("HASHTAGS")),
+        "HASHTAGS": clean(data.get("HASHTAGS")) or "#USStocks #StockMarket #MarketNews #WallStreet",
         "SOURCE_URL": source_url,
         "SLOT": slot,
         "IMAGE_URL": image_src,
