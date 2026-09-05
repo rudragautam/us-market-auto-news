@@ -394,10 +394,10 @@ def render_html_template(data, article, slot):
         "SOURCE_URL": source_url,
         "SLOT": slot,
         "IMAGE_URL": image_src,
-        "LOGO_URL": "the-third-eye-logo.png",
+        "LOGO_URL": "ms_logo.png",
     }
 
-    logo_path = Path("assets/the-third-eye-logo.png")
+    logo_path = Path("assets/ms_logo.png")
     if logo_path.exists():
         (OUTPUT_DIR / logo_path.name).write_bytes(logo_path.read_bytes())
 

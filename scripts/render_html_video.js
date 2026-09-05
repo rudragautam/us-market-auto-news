@@ -52,11 +52,11 @@ async function main() {
       SOURCE_URL: d.SOURCE_URL || d.source_url || '',
       SLOT: d.SLOT || d.slot || 'MARKET UPDATE',
       IMAGE_URL: cleanText(d.IMAGE_URL || d.image_url, 'fallback-market.jpg'),
-      LOGO_URL: cleanText(d.LOGO_URL || d.logo_url, 'the-third-eye-logo.png')
+      LOGO_URL: cleanText(d.LOGO_URL || d.logo_url, 'ms_logo.png')
     };
     Object.keys(values).forEach((key) => { values[key] = cleanText(values[key]); });
     values.IMAGE_URL ||= 'fallback-market.jpg';
-    values.LOGO_URL ||= 'the-third-eye-logo.png';
+    values.LOGO_URL ||= 'ms_logo.png';
 
     // Replace normal text placeholders.
     const replace = (root) => {
@@ -90,7 +90,7 @@ async function main() {
       const logo = document.createElement('img');
       logo.className = 'brand-logo';
       logo.src = values.LOGO_URL;
-      logo.alt = 'The Third Eye';
+      logo.alt = 'MarketScope';
       logo.onerror = () => { logo.style.display = 'none'; };
       eye.replaceWith(logo);
     });

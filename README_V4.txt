@@ -9,7 +9,7 @@ WHAT CHANGED
    - YouTube upload/state tracking remain in the pipeline.
 
 2. templates/market_template.html: NEW — copy/keep exactly as supplied.
-   - This is the active THE THIRD EYE 9:16 template.
+   - This is the active MarketScope 9:16 template.
 
 3. scripts/render_html_video.js: NEW.
    - Captures the HTML/CSS animation using Chromium at 1080x1920.

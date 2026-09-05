@@ -1,0 +1,24 @@
+{
+  "HEADLINE": "Company reports a market development",
+  "HOOK": "A source-backed update is drawing investor attention.",
+  "WHAT_1": "First confirmed detail",
+  "WHAT_2": "Second confirmed detail",
+  "WHAT_3": "Third confirmed detail",
+  "WHY_1": "Investors are monitoring the next update",
+  "WHY_2": "Markets are watching the next company update.",
+  "WHY_3": "Further headlines could move the sector.",
+  "TICKERS": [
+    "EXM"
+  ],
+  "SENTIMENT": "NEUTRAL",
+  "SENTIMENT_TEXT": "The selected story does not clearly favor either direction.",
+  "CAPTION": "A factual summary for investors.",
+  "KEY_SIGNAL": "No material figure reported",
+  "TAKEAWAY": "Investors are monitoring the next update",
+  "SOURCE": "Fixture Wire",
+  "HASHTAGS": "#USStocks #MarketNews",
+  "SOURCE_URL": "https://example.test/story",
+  "SLOT": "MANUAL TEST",
+  "IMAGE_URL": "news_image.jpg",
+  "LOGO_URL": "ms_logo.png"
+}
