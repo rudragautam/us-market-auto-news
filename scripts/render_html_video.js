@@ -28,9 +28,14 @@ async function main() {
   await page.evaluate((d) => {
     document.body.classList.add('render-mode');
 
+    const cleanText = (value, fallback = '') => {
+      const text = String(value ?? '').replace(/\{\{[^}]+\}\}/g, '').trim();
+      return /^(?:undefined|null|n\/?a|none|—|-)$/i.test(text) ? fallback : text;
+    };
+
     const values = {
-      HEADLINE: d.HEADLINE || d.headline || 'US Market Update',
-      HOOK: d.HOOK || d.hook || '',
+      HEADLINE: cleanText(d.HEADLINE || d.headline, 'Market development in focus'),
+      HOOK: cleanText(d.HOOK || d.hook),
       WHAT_1: d.WHAT_1 || d.what?.[0] || '',
       WHAT_2: d.WHAT_2 || d.what?.[1] || '',
       WHAT_3: d.WHAT_3 || d.what?.[2] || '',
@@ -46,8 +51,12 @@ async function main() {
       HASHTAGS: d.HASHTAGS || d.hashtags || '',
       SOURCE_URL: d.SOURCE_URL || d.source_url || '',
       SLOT: d.SLOT || d.slot || 'MARKET UPDATE',
-      IMAGE_URL: d.IMAGE_URL || d.image_url || ''
+      IMAGE_URL: cleanText(d.IMAGE_URL || d.image_url, 'fallback-market.jpg'),
+      LOGO_URL: cleanText(d.LOGO_URL || d.logo_url, 'the-third-eye-logo.png')
     };
+    Object.keys(values).forEach((key) => { values[key] = cleanText(values[key]); });
+    values.IMAGE_URL ||= 'fallback-market.jpg';
+    values.LOGO_URL ||= 'the-third-eye-logo.png';
 
     // Replace normal text placeholders.
     const replace = (root) => {
@@ -67,8 +76,24 @@ async function main() {
     // Dynamic image from Marketaux/local output.
     for (const el of document.querySelectorAll('[data-image-slot]')) {
       const key = el.getAttribute('data-image-slot');
-      if (key && values[key]) el.setAttribute('src', String(values[key]));
+      if (key && values[key]) {
+        el.onerror = () => {
+          if (!el.src.endsWith('/fallback-market.jpg')) el.src = 'fallback-market.jpg';
+        };
+        el.setAttribute('src', String(values[key]));
+      }
     }
+
+    // Use the supplied brand mark wherever the compact CSS eye previously
+    // appeared, keeping the logo subtle in headers and prominent at the end.
+    document.querySelectorAll('.brand > .eye, .channel-strip > .eye').forEach((eye) => {
+      const logo = document.createElement('img');
+      logo.className = 'brand-logo';
+      logo.src = values.LOGO_URL;
+      logo.alt = 'The Third Eye';
+      logo.onerror = () => { logo.style.display = 'none'; };
+      eye.replaceWith(logo);
+    });
 
     // ------------------------------------------------------------
     // DYNAMIC TICKERS — only real values are rendered.
@@ -78,11 +103,11 @@ async function main() {
     if (tickerGrid) {
       tickerGrid.innerHTML = '';
 
-      const tickers = Array.isArray(d.tickers)
+      const rawTickers = Array.isArray(d.tickers)
         ? d.tickers
         : Array.isArray(d.TICKERS)
           ? d.TICKERS
-          : [];
+          : String(d.tickers || d.TICKERS || '').split(/[\n,•]+/);
 
       const drivers = Array.isArray(d.ticker_drivers)
         ? d.ticker_drivers
@@ -92,11 +117,11 @@ async function main() {
             ? d.ticker_moves
             : [];
 
-      tickers
+      rawTickers
         .map((ticker, index) => {
           if (ticker === null || ticker === undefined) return null;
 
-          const symbol = String(ticker).trim();
+          const symbol = String(ticker).trim().replace(/^\$/, '').toUpperCase();
           if (!symbol) return null;
 
           const invalid = ['—', '-', 'N/A', 'NA', 'NONE', 'NULL'];

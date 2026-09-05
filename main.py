@@ -7,6 +7,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import requests
+from PIL import Image
 from google import genai
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -29,7 +30,7 @@ STATE_PATH = Path("data/posted_news.json")
 
 WIDTH, HEIGHT = 1080, 1920
 SLIDE_SECONDS = 5
-FPS = 30
+FPS = 60
 ET = ZoneInfo("America/New_York")
 
 TARGET_SLOTS = {
@@ -109,11 +110,13 @@ def bullet_list(text):
 
 
 def ticker_list(text):
+    if isinstance(text, (list, tuple)):
+        text = ",".join(str(item or "") for item in text)
     parts = re.split(r"[,\n•]+", str(text or ""))
     cleaned = []
     for value in parts:
         value = clean(value).lstrip("$").upper()
-        if value and value not in cleaned and value != "N/A":
+        if value and value not in cleaned and value not in {"N/A", "NA", "NONE", "NULL", "-", "—"}:
             cleaned.append(value)
     return cleaned[:6]
 
@@ -338,10 +341,15 @@ def render_html_template(data, article, slot):
         "NEUTRAL": "The selected story does not clearly favor either direction.",
     }.get(sentiment, "The selected story does not clearly favor either direction.")
 
-    # Download Marketaux image locally so Chromium does not depend on
-    # the source host allowing hotlinked images during video rendering.
+    # Always give Chromium a local, verified image. This prevents source-host
+    # hotlink failures and corrupt/unsupported responses reaching the video.
+    fallback_path = Path("assets/fallback-market.jpg")
+    if not fallback_path.exists():
+        raise RuntimeError(f"Missing required fallback image: {fallback_path}")
+    local_fallback = OUTPUT_DIR / fallback_path.name
+    local_fallback.write_bytes(fallback_path.read_bytes())
     image_url = clean(article.get("image_url"))
-    image_src = image_url
+    image_src = local_fallback.name
     if image_url:
         try:
             img_response = requests.get(
@@ -351,13 +359,17 @@ def render_html_template(data, article, slot):
             )
             img_response.raise_for_status()
             content_type = (img_response.headers.get("content-type") or "").lower()
+            if not content_type.startswith("image/"):
+                raise ValueError("response was not an image")
             ext = ".png" if "png" in content_type else ".webp" if "webp" in content_type else ".jpg"
             image_path = OUTPUT_DIR / f"news_image{ext}"
             image_path.write_bytes(img_response.content)
+            with Image.open(image_path) as image:
+                image.verify()
             image_src = image_path.name
             print(f"News image ready: {image_url}")
         except Exception as exc:
-            print(f"Image download failed; browser will try source image: {exc}")
+            print(f"Image download failed; using repository fallback: {exc}")
 
     values = {
         "HEADLINE": clean(data.get("HEADLINE")) or clean(article.get("title")) or "US Market Update",
@@ -368,11 +380,9 @@ def render_html_template(data, article, slot):
         "WHY_1": why[0] if len(why) > 0 else "The development may affect investor expectations.",
         "WHY_2": why[1] if len(why) > 1 else "Markets are watching the next company update.",
         "WHY_3": why[2] if len(why) > 2 else "Further headlines could move the sector.",
-        "TICKER_1": "$" + tickers[0] if len(tickers) > 0 else "",
-        "TICKER_2": "$" + tickers[1] if len(tickers) > 1 else "—",
-        "TICKER_3": "$" + tickers[2] if len(tickers) > 2 else "—",
-        "TICKER_4": "$" + tickers[3] if len(tickers) > 3 else "—",
-        "MOVE_1": "STORY DRIVER", "MOVE_2": "STORY DRIVER", "MOVE_3": "STORY DRIVER", "MOVE_4": "STORY DRIVER",
+        # Renderer creates cards only from this actual list; never send
+        # placeholder ticker slots or invented "driver" labels.
+        "TICKERS": tickers,
         "SENTIMENT": sentiment,
         "SENTIMENT_TEXT": sentiment_text,
         "CAPTION": caption or "Key US market development to watch.",
@@ -383,7 +393,12 @@ def render_html_template(data, article, slot):
         "SOURCE_URL": source_url,
         "SLOT": slot,
         "IMAGE_URL": image_src,
+        "LOGO_URL": "the-third-eye-logo.png",
     }
+
+    logo_path = Path("assets/the-third-eye-logo.png")
+    if logo_path.exists():
+        (OUTPUT_DIR / logo_path.name).write_bytes(logo_path.read_bytes())
 
     # The HTML renderer performs the final text replacement in the browser.
     # Keep JSON separately so the Node renderer can inject escaped values safely.
