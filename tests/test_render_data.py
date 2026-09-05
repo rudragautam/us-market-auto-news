@@ -1,6 +1,8 @@
 """Focused fixtures for the payload consumed by the browser renderer."""
 import json
 import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -78,6 +80,50 @@ class RenderDataTests(unittest.TestCase):
         payload = json.loads((Path("output") / "market_template_data.json").read_text())
         self.assertEqual(payload["IMAGE_URL"], "news_image.jpg")
         self.assertTrue((Path("output") / "news_image.jpg").exists())
+
+    def test_missing_background_audio_keeps_video(self):
+        with tempfile.TemporaryDirectory() as directory:
+            video = Path(directory) / "rendered.mp4"
+            video.write_bytes(b"original")
+            result = main.add_background_audio(video, Path(directory) / "missing.mp4")
+            self.assertEqual(result, video)
+            self.assertEqual(video.read_bytes(), b"original")
+
+    def test_background_audio_loops_trims_and_replaces_safely(self):
+        with tempfile.TemporaryDirectory() as directory:
+            video = Path(directory) / "rendered.mp4"
+            audio = Path(directory) / "music.mp4"
+            video.write_bytes(b"original")
+            audio.write_bytes(b"audio")
+
+            def ffmpeg_success(command, **_kwargs):
+                Path(command[-1]).write_bytes(b"muxed")
+
+            with patch.object(main, "media_duration", return_value=34.7), \
+                 patch.object(main.subprocess, "run", side_effect=ffmpeg_success) as run:
+                main.add_background_audio(video, audio)
+
+            command = run.call_args.args[0]
+            self.assertIn("-stream_loop", command)
+            self.assertIn("-shortest", command)
+            self.assertIn("-c:v", command)
+            self.assertIn("copy", command)
+            audio_filter = command[command.index("-filter_complex") + 1]
+            self.assertIn("volume=0.20", audio_filter)
+            self.assertIn("atrim=duration=34.700", audio_filter)
+            self.assertIn("afade=t=out:st=33.950:d=0.750", audio_filter)
+            self.assertEqual(video.read_bytes(), b"muxed")
+
+    def test_background_audio_failure_keeps_original_video(self):
+        with tempfile.TemporaryDirectory() as directory:
+            video = Path(directory) / "rendered.mp4"
+            audio = Path(directory) / "music.mp4"
+            video.write_bytes(b"original")
+            audio.write_bytes(b"audio")
+            with patch.object(main, "media_duration", return_value=10), \
+                 patch.object(main.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "ffmpeg")):
+                main.add_background_audio(video, audio)
+            self.assertEqual(video.read_bytes(), b"original")
 
 
 if __name__ == "__main__":

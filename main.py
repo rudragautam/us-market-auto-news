@@ -27,6 +27,7 @@ YOUTUBE_REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
 
 OUTPUT_DIR = Path("output")
 STATE_PATH = Path("data/posted_news.json")
+BACKGROUND_AUDIO_PATH = Path("assets/Patterns_of_Intent.mp4")
 
 WIDTH, HEIGHT = 1080, 1920
 SLIDE_SECONDS = 5
@@ -420,6 +421,74 @@ def render_html_template(data, article, slot):
 # ============================================================
 
 
+def media_duration(path):
+    """Return a media duration in seconds using the FFmpeg toolchain."""
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    duration = float(result.stdout.strip())
+    if duration <= 0:
+        raise ValueError(f"Invalid media duration for {path}: {duration}")
+    return duration
+
+
+def add_background_audio(video_path, audio_path=BACKGROUND_AUDIO_PATH):
+    """Mux looped, quiet background audio without risking the rendered video."""
+    video_path = Path(video_path)
+    audio_path = Path(audio_path)
+
+    if not video_path.exists():
+        raise FileNotFoundError(f"Rendered video missing: {video_path}")
+    if not audio_path.exists():
+        print("Background audio not found; continuing without audio.")
+        return video_path
+
+    temp_path = video_path.with_name(f"{video_path.stem}_with_audio.mp4")
+    try:
+        duration = media_duration(video_path)
+        fade_duration = min(0.75, duration)
+        fade_start = max(0, duration - fade_duration)
+        audio_filter = (
+            f"[0:a:0]volume=0.20,atrim=duration={duration:.3f},"
+            f"afade=t=out:st={fade_start:.3f}:d={fade_duration:.3f}[music]"
+        )
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-stream_loop", "-1", "-i", str(audio_path),
+                "-i", str(video_path),
+                "-filter_complex", audio_filter,
+                "-map", "1:v:0", "-map", "[music]",
+                "-c:v", "copy",
+                "-c:a", "aac", "-b:a", "128k",
+                "-shortest", "-movflags", "+faststart",
+                str(temp_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        temp_path.replace(video_path)
+        print("Background audio added.")
+    except Exception as exc:
+        temp_path.unlink(missing_ok=True)
+        error_detail = clean(getattr(exc, "stderr", "")) or str(exc)
+        print(
+            "Background audio processing failed; continuing without audio: "
+            f"{error_detail}"
+        )
+
+    return video_path
+
+
 def make_video(data, article, slot):
     print("Rendering HTML/CSS animated Shorts video...")
     html_path, data_path = render_html_template(data, article, slot)
@@ -455,6 +524,7 @@ def make_video(data, article, slot):
     )
 
     webm_path.unlink(missing_ok=True)
+    final = add_background_audio(final)
     print("7 HTML scenes rendered successfully.")
     print(f"Video ready: {final}")
     return final
