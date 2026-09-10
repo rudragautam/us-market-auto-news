@@ -4,21 +4,14 @@ on:
   workflow_dispatch:
 
   schedule:
-    # Pre-market 8:30 ET
-    - cron: "30 12 * * 1-5"
-    - cron: "30 13 * * 1-5"
-
-    # After open 10:00 ET
-    - cron: "0 14 * * 1-5"
-    - cron: "0 15 * * 1-5"
-
-    # Mid-market 1:00 ET
-    - cron: "0 17 * * 1-5"
-    - cron: "0 18 * * 1-5"
-
-    # After close 4:15 ET
-    - cron: "15 20 * * 1-5"
-    - cron: "15 21 * * 1-5"
+    - cron: "30 8 * * 1-5"
+      timezone: "America/New_York"
+    - cron: "0 10 * * 1-5"
+      timezone: "America/New_York"
+    - cron: "0 13 * * 1-5"
+      timezone: "America/New_York"
+    - cron: "15 16 * * 1-5"
+      timezone: "America/New_York"
 
 permissions:
   contents: write
@@ -26,13 +19,12 @@ permissions:
 jobs:
   generate-news:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
@@ -47,8 +39,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
 
@@ -57,7 +48,7 @@ jobs:
           npm install --no-save playwright@1.55.0
           npx playwright install --with-deps chromium
 
-      - name: Generate video and upload to YouTube
+      - name: Generate and upload YouTube Short
         env:
           MARKETAUX_API_KEY: ${{ secrets.MARKETAUX_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -65,13 +56,13 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           YOUTUBE_PRIVACY_STATUS: private
-        run: |
-          python main.py
+          GITHUB_SCHEDULE: ${{ github.event.schedule }}
+        run: python main.py
 
-      - name: Upload generated output
+      - name: Upload output
         uses: actions/upload-artifact@v4
         with:
-          name: us-market-news-v2-${{ github.run_number }}
+          name: us-market-news-${{ github.run_number }}
           path: output/
           if-no-files-found: error
           retention-days: 7
