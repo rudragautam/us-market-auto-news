@@ -52,33 +52,29 @@ STATE_PATH.parent.mkdir(exist_ok=True, parents=True)
 def clean(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
-
 def slot_info():
     now = datetime.now(ET)
 
     if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
         return "MANUAL TEST", now
 
-    nearest_name = None
-    nearest_seconds = 10**9
+    schedule = os.environ.get("GITHUB_SCHEDULE", "").strip()
 
-    for (hour, minute), name in TARGET_SLOTS.items():
-        target = now.replace(
-            hour=hour,
-            minute=minute,
-            second=0,
-            microsecond=0,
+    slots = {
+        "30 8 * * 1-5": "PRE-MARKET",
+        "0 10 * * 1-5": "AFTER OPEN",
+        "0 13 * * 1-5": "MID-MARKET",
+        "15 16 * * 1-5": "AFTER CLOSE",
+    }
+
+    slot = slots.get(schedule)
+
+    if not slot:
+        raise RuntimeError(
+            f"Unknown GitHub schedule: {schedule!r}"
         )
-        seconds = abs((now - target).total_seconds())
-        if seconds < nearest_seconds:
-            nearest_seconds = seconds
-            nearest_name = name
 
-    if nearest_seconds > 600:
-        print(f"No scheduled slot at {now.strftime('%H:%M:%S %Z')}. Skipping.")
-        raise SystemExit(0)
-
-    return nearest_name, now
+    return slot, now
 
 
 def load_state():
